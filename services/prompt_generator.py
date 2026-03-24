@@ -1,7 +1,8 @@
-import json
 import logging
 
 import anthropic
+
+from services.utils import parse_claude_json
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +64,7 @@ class PromptGenerator:
         )
 
         response_text = message.content[0].text
-
-        if "```json" in response_text:
-            response_text = response_text.split("```json")[1].split("```")[0]
-        elif "```" in response_text:
-            response_text = response_text.split("```")[1].split("```")[0]
-
-        prompts = json.loads(response_text.strip())
+        prompts = parse_claude_json(response_text)
 
         # 기존 씬 데이터에 프롬프트 머지
         prompt_map = {p["id"]: p for p in prompts}

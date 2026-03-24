@@ -3,3 +3,5 @@ __pycache__/
 .env
 .pytest_cache/
 projects/
+credentials.json
+token_upload.json

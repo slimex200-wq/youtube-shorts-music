@@ -102,7 +102,7 @@ class ShortsComposer:
         cmd = self.build_scene_cmd(asset_path, duration, output_path)
 
         logger.info("씬 %d 클립 생성 (%.1f초)", scene["id"], duration)
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         if result.returncode != 0:
             raise RuntimeError(f"FFmpeg 에러 (씬 {scene['id']}): {result.stderr[:500]}")
         return output_path
@@ -122,7 +122,7 @@ class ShortsComposer:
             str(output_path),
         ]
 
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         Path(list_path).unlink(missing_ok=True)
         if result.returncode != 0:
             raise RuntimeError(f"FFmpeg concat 에러: {result.stderr[:500]}")
@@ -137,7 +137,7 @@ class ShortsComposer:
             "-shortest", "-movflags", "+faststart",
             str(output_path),
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         if result.returncode != 0:
             raise RuntimeError(f"오디오 머지 에러: {result.stderr[:500]}")
         return output_path
@@ -152,7 +152,7 @@ class ShortsComposer:
             "-c:a", "copy", "-movflags", "+faststart",
             str(output_path),
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         if result.returncode != 0:
             raise RuntimeError(f"자막 burn-in 에러: {result.stderr[:500]}")
         return output_path

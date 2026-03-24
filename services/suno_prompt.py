@@ -1,7 +1,8 @@
-import json
 import logging
 
 import anthropic
+
+from services.utils import parse_claude_json
 
 logger = logging.getLogger(__name__)
 
@@ -65,10 +66,4 @@ class SunoPromptGenerator:
         )
 
         response_text = message.content[0].text
-
-        if "```json" in response_text:
-            response_text = response_text.split("```json")[1].split("```")[0]
-        elif "```" in response_text:
-            response_text = response_text.split("```")[1].split("```")[0]
-
-        return json.loads(response_text.strip())
+        return parse_claude_json(response_text)
