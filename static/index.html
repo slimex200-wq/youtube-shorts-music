@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube Shorts Music</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <div id="nav-left">
+      <span class="nav-title">YouTube Shorts Music</span>
+    </div>
+    <div id="nav-right"></div>
+  </div>
+</nav>
+
+<!-- Dashboard -->
+<div id="view-dashboard">
+  <section class="container">
+    <div class="section-header">
+      <span class="section-title">Projects</span>
+      <button class="btn btn-primary btn-sm" onclick="showCreateModal()">New Project</button>
+    </div>
+    <div id="project-list" class="project-list"></div>
+  </section>
+</div>
+
+<!-- Project Detail -->
+<div id="view-project" class="hidden">
+  <section class="container">
+    <!-- Steps -->
+    <div class="steps" id="steps-bar"></div>
+
+    <!-- Step content -->
+    <div id="step-content"></div>
+  </section>
+</div>
+
+<!-- Create Modal -->
+<div id="create-modal" class="modal-backdrop hidden" onclick="if(event.target===this)hideCreateModal()">
+  <div class="modal">
+    <div class="modal-title">New Project</div>
+    <form id="create-form" onsubmit="handleCreate(event)">
+      <div class="form-group">
+        <label class="form-label">Genre</label>
+        <input class="form-input" name="genre" placeholder="lo-fi hip hop, dark trap, acid techno..." required>
+      </div>
+      <label class="form-check mt-12">
+        <input type="checkbox" name="instrumental" checked onchange="toggleLyrics(this)">
+        Instrumental
+      </label>
+      <div class="form-group mt-12 hidden" id="lyrics-group">
+        <label class="form-label">Lyrics</label>
+        <textarea class="form-input" name="lyrics" rows="3" placeholder="Enter lyrics"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="hideCreateModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="create-btn">Create</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

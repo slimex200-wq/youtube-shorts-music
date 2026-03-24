@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 .env
 .pytest_cache/
+.venv/
 projects/
 credentials.json
 token_upload.json
