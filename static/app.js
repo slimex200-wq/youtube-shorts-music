@@ -94,8 +94,10 @@ async function handleCreate(e) {
 
   const fd = new FormData(form);
   const instrumental = fd.has('instrumental');
+  const style = fd.get('style') || null;
   const body = {
     genre: fd.get('genre'),
+    style,
     instrumental,
     lyrics: !instrumental && fd.get('lyrics') ? fd.get('lyrics') : null,
   };
@@ -302,6 +304,21 @@ function renderStepPrompts(p) {
 // --- Step: Assets ---
 
 function renderStepAssets(p) {
+  const currentStyle = p.style || '';
+  const regenBtn = `
+    <div class="regen-row mb-12" style="display:flex;gap:8px;align-items:center">
+      <select class="form-input" id="regen-style-select" style="flex:1">
+        <option value="" ${!currentStyle ? 'selected' : ''}>Default (genre-based)</option>
+        <option value="anime" ${currentStyle === 'anime' ? 'selected' : ''}>Anime (Japanese animation)</option>
+        <option value="cyberpunk" ${currentStyle === 'cyberpunk' ? 'selected' : ''}>Cyberpunk</option>
+        <option value="retro" ${currentStyle === 'retro' ? 'selected' : ''}>Retro / Vaporwave</option>
+        <option value="watercolor" ${currentStyle === 'watercolor' ? 'selected' : ''}>Watercolor</option>
+      </select>
+      <button class="btn btn-secondary" id="regen-prompts-btn" onclick="handleRegenPrompts()">
+        Regenerate
+      </button>
+    </div>`;
+
   const scenePrompts = p.scenes.map(s => `
     <div class="scene-item" data-copy="${attr(s.image_prompt || '')}">
       <div class="scene-header">
@@ -326,6 +343,7 @@ function renderStepAssets(p) {
         Compose Video
       </button>
     </div>
+    ${regenBtn}
     <div class="scene-list">${scenePrompts}</div>
   `;
 }
@@ -400,6 +418,23 @@ async function handleMusicUpload(file) {
     renderProject();
   } catch (err) {
     content.innerHTML = `<div class="empty-state" style="color:var(--error)">${err.message}</div>`;
+  }
+}
+
+async function handleRegenPrompts() {
+  const btn = document.getElementById('regen-prompts-btn');
+  const style = document.getElementById('regen-style-select').value || null;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Regenerating...';
+
+  try {
+    await api('PATCH', `/projects/${currentProject.id}`, { style });
+    currentProject = await api('POST', `/projects/${currentProject.id}/prompts`);
+    renderProject();
+  } catch (err) {
+    alert(err.message);
+    btn.disabled = false;
+    btn.textContent = 'Regenerate';
   }
 }
 

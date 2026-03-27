@@ -14,14 +14,15 @@ def cli():
 
 
 @cli.command()
-@click.option("--genre", required=True, help="음악 장르 (예: lo-fi hip hop, dark trap)")
+@click.option("--genre", required=True, help="음악 장르 (예: lo-fi hip hop, dark trap, shranz)")
+@click.option("--style", default=None, help="비주얼 아트 스타일 (예: anime, cyberpunk, retro)")
 @click.option("--instrumental", is_flag=True, help="인스트루멘탈 (가사 없음)")
 @click.option("--lyrics", default=None, help="가사 텍스트")
 @click.option("--bpm", type=int, default=None, help="원하는 BPM")
 @click.option("--mood", default=None, help="분위기 (예: aggressive, dreamy)")
-def create(genre, instrumental, lyrics, bpm, mood):
+def create(genre, style, instrumental, lyrics, bpm, mood):
     """프로젝트 생성 + Suno 프롬프트 생성"""
-    project = Project.create(genre=genre, instrumental=instrumental, lyrics=lyrics)
+    project = Project.create(genre=genre, instrumental=instrumental, lyrics=lyrics, style=style)
     project.update_status("created", step_name="create")
 
     from config import Config
@@ -86,8 +87,13 @@ def music(project_id, music_path, beats_per_scene):
     project.duration_sec = analysis["duration_sec"]
     project.beat_times = analysis["beat_times"]
 
-    if project.duration_sec > 58:
-        click.echo(f"[경고] 길이 {project.duration_sec:.0f}초 — Shorts 제한(58초) 초과!")
+    # Shorts 60초 제한: 초과 시 트리밍 + fade out 2초
+    trim = analyzer.trim_for_shorts(project.beat_times, project.duration_sec)
+    if trim["trimmed"]:
+        click.echo(f"[트리밍] {project.duration_sec:.0f}초 → {trim['duration_sec']:.0f}초 (fade out {trim['fade_out_sec']:.0f}초)")
+        project.beat_times = trim["beat_times"]
+        project.duration_sec = trim["duration_sec"]
+    project.config["fade_out_sec"] = trim["fade_out_sec"]
 
     bps = beats_per_scene or analyzer.suggest_beats_per_scene(project.bpm, project.duration_sec)
     scenes = analyzer.split_scenes(project.beat_times, project.duration_sec, beats_per_scene=bps)
@@ -138,6 +144,7 @@ def prompts(project_id):
             lyrics=project.lyrics,
             instrumental=project.instrumental,
             suno_prompt=project.suno_prompt,
+            style=project.style,
         )
     except Exception as e:
         project.set_error("prompts", str(e))
@@ -177,13 +184,17 @@ def compose(project_id):
         return
 
     composer = ShortsComposer()
+    fade_out = project.config.get("fade_out_sec", 0.0)
     click.echo(f"[영상 조립] {len(project.scenes)}개 씬, 비트 싱크...")
+    if fade_out > 0:
+        click.echo(f"[fade out] {fade_out:.0f}초")
 
     try:
         final_path = composer.compose_full(
             project_dir=project.project_dir,
             scenes=project.scenes,
             music_file=project.music_file,
+            fade_out_sec=fade_out,
         )
     except FileNotFoundError as e:
         click.echo(f"[에러] {e}")

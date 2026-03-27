@@ -74,6 +74,34 @@ class BeatAnalyzer:
 
         return scenes
 
+    def trim_for_shorts(
+        self,
+        beat_times: list[float],
+        duration: float,
+        max_duration: float = 60.0,
+        fade_out_sec: float = 2.0,
+    ) -> dict:
+        """Shorts 길이 제한: max_duration 초과 시 트리밍 + fade out 정보 반환"""
+        if duration <= max_duration:
+            return {
+                "beat_times": list(beat_times),
+                "duration_sec": duration,
+                "fade_out_sec": 0.0,
+                "trimmed": False,
+            }
+
+        trimmed_beats = [t for t in beat_times if t <= max_duration]
+        logger.info(
+            "Shorts 트리밍: %.1f초 → %.1f초 (fade out %.1f초)",
+            duration, max_duration, fade_out_sec,
+        )
+        return {
+            "beat_times": trimmed_beats,
+            "duration_sec": max_duration,
+            "fade_out_sec": fade_out_sec,
+            "trimmed": True,
+        }
+
     def suggest_beats_per_scene(self, bpm: float, duration_sec: float) -> int:
         """BPM과 길이에 따라 적절한 씬당 비트 수 제안 (목표: 4~10 씬)"""
         total_beats = bpm * duration_sec / 60.0

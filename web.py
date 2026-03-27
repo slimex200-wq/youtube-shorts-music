@@ -15,6 +15,7 @@ app = FastAPI(title="YouTube Shorts Music")
 
 class CreateRequest(BaseModel):
     genre: str
+    style: str | None = None
     instrumental: bool = False
     lyrics: str | None = None
     bpm: int | None = None
@@ -25,6 +26,7 @@ def _serialize(p: Project) -> dict:
     return {
         "id": p.id,
         "genre": p.genre,
+        "style": p.style,
         "status": p.status,
         "steps_completed": p.steps_completed,
         "instrumental": p.instrumental,
@@ -52,7 +54,7 @@ def _load(pid: str) -> Project:
 @app.post("/api/projects")
 async def create_project(req: CreateRequest):
     project = Project.create(
-        genre=req.genre, instrumental=req.instrumental, lyrics=req.lyrics
+        genre=req.genre, instrumental=req.instrumental, lyrics=req.lyrics, style=req.style
     )
     project.update_status("created", step_name="create")
 
@@ -86,6 +88,19 @@ async def get_project(pid: str):
     return _serialize(_load(pid))
 
 
+class UpdateRequest(BaseModel):
+    style: str | None = None
+
+
+@app.patch("/api/projects/{pid}")
+async def update_project(pid: str, req: UpdateRequest):
+    p = _load(pid)
+    if req.style is not None:
+        p.style = req.style
+    p.save()
+    return _serialize(p)
+
+
 @app.delete("/api/projects/{pid}")
 async def delete_project(pid: str):
     p = _load(pid)
@@ -114,6 +129,13 @@ async def upload_music(pid: str, file: UploadFile = File(...)):
     project.bpm = analysis["bpm"]
     project.duration_sec = analysis["duration_sec"]
     project.beat_times = analysis["beat_times"]
+
+    # Shorts 60초 제한: 초과 시 트리밍 + fade out 2초
+    trim = analyzer.trim_for_shorts(project.beat_times, project.duration_sec)
+    if trim["trimmed"]:
+        project.beat_times = trim["beat_times"]
+        project.duration_sec = trim["duration_sec"]
+    project.config["fade_out_sec"] = trim["fade_out_sec"]
 
     bps = analyzer.suggest_beats_per_scene(project.bpm, project.duration_sec)
     scenes = analyzer.split_scenes(
@@ -146,6 +168,7 @@ async def generate_prompts(pid: str):
             lyrics=project.lyrics,
             instrumental=project.instrumental,
             suno_prompt=project.suno_prompt,
+            style=project.style,
         )
     except Exception as e:
         raise HTTPException(500, f"Prompt generation failed: {e}")
@@ -211,11 +234,13 @@ async def compose_video(pid: str):
         raise HTTPException(400, "No music file.")
 
     composer = ShortsComposer()
+    fade_out = project.config.get("fade_out_sec", 0.0)
     try:
         composer.compose_full(
             project_dir=project.project_dir,
             scenes=project.scenes,
             music_file=project.music_file,
+            fade_out_sec=fade_out,
         )
     except FileNotFoundError as e:
         raise HTTPException(400, str(e))

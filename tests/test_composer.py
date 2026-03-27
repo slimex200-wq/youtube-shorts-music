@@ -85,3 +85,30 @@ def test_subtitle_style():
     style = composer.get_subtitle_style()
     assert "FontSize" in style
     assert "Alignment=10" in style
+
+
+def test_build_audio_cmd_with_fade_out():
+    """fade_out_sec > 0이면 오디오에 afade 필터 + 트리밍 적용"""
+    composer = ShortsComposer()
+    cmd = composer.build_audio_cmd(
+        audio_path=Path("music.mp3"),
+        duration=60.0,
+        fade_out_sec=2.0,
+        output_path=Path("trimmed.aac"),
+    )
+    cmd_str = " ".join(cmd)
+    assert "afade=t=out" in cmd_str
+    assert "60" in cmd_str
+
+
+def test_build_audio_cmd_no_fade():
+    """fade_out_sec == 0이면 필터 없이 그대로"""
+    composer = ShortsComposer()
+    cmd = composer.build_audio_cmd(
+        audio_path=Path("music.mp3"),
+        duration=40.0,
+        fade_out_sec=0.0,
+        output_path=Path("trimmed.aac"),
+    )
+    cmd_str = " ".join(cmd)
+    assert "afade" not in cmd_str

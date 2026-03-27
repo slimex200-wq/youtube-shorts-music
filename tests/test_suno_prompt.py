@@ -73,3 +73,16 @@ def test_generate_handles_markdown_json():
         result = gen.generate(genre="jazz")
 
     assert "style" in result
+
+
+def test_generate_shranz_includes_genre_context():
+    """shranz 장르 시 시스템 프롬프트에 장르 지식이 반영되는지 확인"""
+    gen = SunoPromptGenerator("fake-key")
+    mock_msg = MagicMock()
+    mock_msg.content = [MagicMock(text=json.dumps(MOCK_RESPONSE))]
+
+    with patch.object(gen.client.messages, "create", return_value=mock_msg) as mock_create:
+        gen.generate(genre="shranz", bpm=155)
+
+    system_msg = mock_create.call_args[1]["system"]
+    assert "distort" in system_msg.lower() or "kick" in system_msg.lower()

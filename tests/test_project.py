@@ -24,6 +24,14 @@ def test_create_with_lyrics(tmp_path):
     assert project.lyrics == "가사 텍스트"
 
 
+def test_create_with_style(tmp_path):
+    project = Project.create(genre="shranz", base_dir=tmp_path, style="anime")
+    assert project.style == "anime"
+
+    loaded = Project.load(project.id, base_dir=tmp_path)
+    assert loaded.style == "anime"
+
+
 def test_load_project(tmp_path):
     project = Project.create(genre="jazz", base_dir=tmp_path)
     loaded = Project.load(project.id, base_dir=tmp_path)

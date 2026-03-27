@@ -2,7 +2,7 @@ import json
 import random
 import re
 import string
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, fields, asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -27,6 +27,7 @@ class Project:
     created_at: str = ""
     steps_completed: list = field(default_factory=list)
     instrumental: bool = False
+    style: Optional[str] = None
     lyrics: Optional[str] = None
     suno_prompt: Optional[dict] = None
     music_file: Optional[str] = None
@@ -48,6 +49,7 @@ class Project:
         base_dir: Path = None,
         instrumental: bool = False,
         lyrics: str = None,
+        style: str = None,
     ) -> "Project":
         base = base_dir or PROJECTS_DIR
         now = datetime.now(timezone.utc)
@@ -56,6 +58,7 @@ class Project:
             id=project_id,
             genre=genre,
             instrumental=instrumental,
+            style=style,
             lyrics=lyrics,
             created_at=now.isoformat(),
             _base_dir=base,
@@ -74,7 +77,9 @@ class Project:
         path = base / project_id / "project.json"
         data = json.loads(path.read_text(encoding="utf-8"))
         data["_base_dir"] = base
-        return cls(**data)
+        valid_fields = {f.name for f in fields(cls)}
+        filtered = {k: v for k, v in data.items() if k in valid_fields or k == "_base_dir"}
+        return cls(**filtered)
 
     @classmethod
     def list_all(cls, base_dir: Path = None) -> list["Project"]:

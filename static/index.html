@@ -47,7 +47,17 @@
     <form id="create-form" onsubmit="handleCreate(event)">
       <div class="form-group">
         <label class="form-label">Genre</label>
-        <input class="form-input" name="genre" placeholder="lo-fi hip hop, dark trap, acid techno..." required>
+        <input class="form-input" name="genre" placeholder="lo-fi hip hop, dark trap, shranz..." required>
+      </div>
+      <div class="form-group mt-12">
+        <label class="form-label">Visual Style</label>
+        <select class="form-input" name="style">
+          <option value="">Default (genre-based)</option>
+          <option value="anime" selected>Anime (Japanese animation)</option>
+          <option value="cyberpunk">Cyberpunk</option>
+          <option value="retro">Retro / Vaporwave</option>
+          <option value="watercolor">Watercolor</option>
+        </select>
       </div>
       <label class="form-check mt-12">
         <input type="checkbox" name="instrumental" checked onchange="toggleLyrics(this)">

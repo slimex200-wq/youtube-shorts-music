@@ -130,6 +130,38 @@ class ShortsComposer:
             raise RuntimeError(f"FFmpeg concat 에러: {result.stderr[:500]}")
         return output_path
 
+    def build_audio_cmd(
+        self,
+        audio_path: Path,
+        duration: float,
+        fade_out_sec: float,
+        output_path: Path,
+    ) -> list[str]:
+        """오디오 트리밍 + fade out FFmpeg 명령어 생성"""
+        cmd = ["ffmpeg", "-y", "-i", str(audio_path)]
+        if fade_out_sec > 0:
+            fade_start = duration - fade_out_sec
+            cmd += [
+                "-af", f"afade=t=out:st={fade_start}:d={fade_out_sec}",
+                "-t", str(duration),
+            ]
+        cmd += ["-c:a", "aac", "-b:a", "192k", str(output_path)]
+        return cmd
+
+    def trim_audio(
+        self,
+        audio_path: Path,
+        duration: float,
+        fade_out_sec: float,
+        output_path: Path,
+    ) -> Path:
+        """오디오를 duration으로 자르고 fade out 적용"""
+        cmd = self.build_audio_cmd(audio_path, duration, fade_out_sec, output_path)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if result.returncode != 0:
+            raise RuntimeError(f"오디오 트리밍 에러: {result.stderr[:500]}")
+        return output_path
+
     def merge_audio(self, video_path: Path, audio_path: Path, output_path: Path) -> Path:
         """비주얼 영상 + 음악 파일 합치기"""
         cmd = [
@@ -159,8 +191,14 @@ class ShortsComposer:
             raise RuntimeError(f"자막 burn-in 에러: {result.stderr[:500]}")
         return output_path
 
-    def compose_full(self, project_dir: Path, scenes: list[dict], music_file: str) -> Path:
-        """전체 파이프라인: 씬 렌더 → concat → 음악 합치기 → (자막)"""
+    def compose_full(
+        self,
+        project_dir: Path,
+        scenes: list[dict],
+        music_file: str,
+        fade_out_sec: float = 0.0,
+    ) -> Path:
+        """전체 파이프라인: 씬 렌더 → concat → 오디오 트리밍/fade out → 음악 합치기 → (자막)"""
         assets_dir = project_dir / "assets"
         music_path = project_dir / "music" / music_file
         output_dir = project_dir / "output"
@@ -179,8 +217,17 @@ class ShortsComposer:
             concat_path = work_dir / "concat.mp4"
             self.concat_clips(clips, concat_path)
 
+            # 오디오 트리밍 + fade out
+            if fade_out_sec > 0:
+                total_duration = scenes[-1]["end_sec"]
+                trimmed_audio = work_dir / "audio_trimmed.aac"
+                self.trim_audio(music_path, total_duration, fade_out_sec, trimmed_audio)
+                audio_for_merge = trimmed_audio
+            else:
+                audio_for_merge = music_path
+
             merged_path = work_dir / "merged.mp4"
-            self.merge_audio(concat_path, music_path, merged_path)
+            self.merge_audio(concat_path, audio_for_merge, merged_path)
 
             srt_content = self.generate_lyrics_srt(scenes)
             project_id = project_dir.name

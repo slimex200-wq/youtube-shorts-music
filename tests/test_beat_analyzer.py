@@ -76,3 +76,48 @@ def test_suggest_beats_per_scene():
     total_beats = 120.0 * 45.0 / 60.0
     scene_count = total_beats / suggestion
     assert 4 <= scene_count <= 12
+
+
+def test_trim_for_shorts_long_song():
+    """60초 초과 시 60초로 트리밍 + fade_out 2초"""
+    # 120 BPM, 90초 노래 → 0.5초 간격 180비트
+    beat_times = [i * 0.5 for i in range(180)]
+    duration = 90.0
+
+    analyzer = BeatAnalyzer()
+    result = analyzer.trim_for_shorts(beat_times, duration)
+
+    assert result["duration_sec"] == 60.0
+    assert result["fade_out_sec"] == 2.0
+    assert result["trimmed"] is True
+    # 60초 이내의 비트만 남아야 함
+    assert all(t <= 60.0 for t in result["beat_times"])
+    # 원본보다 적어야 함
+    assert len(result["beat_times"]) < len(beat_times)
+
+
+def test_trim_for_shorts_short_song():
+    """60초 이하면 트리밍 없음"""
+    beat_times = [i * 0.5 for i in range(80)]
+    duration = 40.0
+
+    analyzer = BeatAnalyzer()
+    result = analyzer.trim_for_shorts(beat_times, duration)
+
+    assert result["duration_sec"] == 40.0
+    assert result["fade_out_sec"] == 0.0
+    assert result["trimmed"] is False
+    assert len(result["beat_times"]) == 80
+
+
+def test_trim_for_shorts_custom_max():
+    """max_duration 커스텀 설정"""
+    beat_times = [i * 0.5 for i in range(100)]
+    duration = 50.0
+
+    analyzer = BeatAnalyzer()
+    result = analyzer.trim_for_shorts(beat_times, duration, max_duration=30.0)
+
+    assert result["duration_sec"] == 30.0
+    assert result["trimmed"] is True
+    assert all(t <= 30.0 for t in result["beat_times"])

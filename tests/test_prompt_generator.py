@@ -57,6 +57,25 @@ def test_generate_instrumental_no_lyrics():
     assert "instrumental" in user_msg.lower()
 
 
+def test_generate_with_style_anime():
+    """style='anime' 전달 시 user prompt에 포함"""
+    gen = PromptGenerator("fake-key")
+    scenes = [
+        {"id": 1, "start_sec": 0.0, "end_sec": 6.0, "beat_count": 8,
+         "image_prompt": None, "video_prompt": None, "asset_file": None, "lyrics_line": None},
+    ]
+
+    mock_response = [{"id": 1, "image_prompt": "Anime style scene, 9:16 vertical", "video_prompt": "Anime pan, 9:16 vertical, 6 seconds", "lyrics_line": None}]
+    mock_msg = MagicMock()
+    mock_msg.content = [MagicMock(text=json.dumps(mock_response))]
+
+    with patch.object(gen.client.messages, "create", return_value=mock_msg) as mock_create:
+        gen.generate(genre="shranz", scenes=scenes, instrumental=True, style="anime")
+
+    user_msg = mock_create.call_args[1]["messages"][0]["content"]
+    assert "anime" in user_msg.lower()
+
+
 def test_generate_with_lyrics_distribution():
     gen = PromptGenerator("fake-key")
     scenes = [
