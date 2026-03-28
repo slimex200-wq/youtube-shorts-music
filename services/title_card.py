@@ -27,13 +27,15 @@ class TitleCardGenerator:
         fade_in_ms: int = 800,
         fade_out_ms: int = 800,
     ) -> Path:
-        title_upper = title.upper()
-        artist_upper = artist_name.upper()
+        title_upper = self._escape_ass_text(title.upper())
+        artist_upper = self._escape_ass_text(artist_name.upper())
         display_text = f"{title_upper} \u00b7 {artist_upper}"
 
         end_sec = start_sec + duration_sec
         underline_start = start_sec + 0.3
         underline_end = end_sec - 0.3
+        underline_fade_in = max(0, fade_in_ms - 200)
+        underline_fade_out = max(0, fade_out_ms - 200)
         underline_width = len(display_text) * _CHAR_WIDTH_PX
 
         underline_y = 1920 - 60 + 2
@@ -61,7 +63,7 @@ class TitleCardGenerator:
             f"{{\\fad({fade_in_ms},{fade_out_ms})}}{display_text}\n"
             f"Dialogue: 1,{self._format_ass_time(underline_start)},"
             f"{self._format_ass_time(underline_end)},Underline,,0,0,0,,"
-            f"{{\\fad({fade_in_ms - 200},{fade_out_ms - 200})"
+            f"{{\\fad({underline_fade_in},{underline_fade_out})"
             f"\\pos(20,{underline_y})\\p1"
             f"\\1a{_UNDERLINE_ALPHA}\\3a&HFF&}}"
             f"m 0 0 l {underline_width} 0 l {underline_width} 1 l 0 1"
@@ -72,6 +74,10 @@ class TitleCardGenerator:
         output_path.write_text(content, encoding="utf-8")
         logger.info("타이틀 카드 ASS 생성: %s", output_path)
         return output_path
+
+    @staticmethod
+    def _escape_ass_text(text: str) -> str:
+        return text.replace("{", "\\{").replace("}", "\\}")
 
     @staticmethod
     def _format_ass_time(seconds: float) -> str:

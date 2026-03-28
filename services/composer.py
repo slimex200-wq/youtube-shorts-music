@@ -1,5 +1,6 @@
 """YouTube Shorts 9:16 비트 싱크 영상 조립기"""
 import logging
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -290,7 +291,7 @@ class ShortsComposer:
             final_path = output_dir / f"{project_id}_shorts.mp4"
             tc_config = title_card_config or {}
 
-            if title and tc_config.get("enabled", False):
+            if title and tc_config.get("enabled", True):
                 fonts_dir = project_dir / "assets" / "fonts"
                 if not fonts_dir.exists():
                     fonts_dir = Path(__file__).parent.parent / "assets" / "fonts"
@@ -303,7 +304,6 @@ class ShortsComposer:
                     fonts_dir=fonts_dir,
                 )
             else:
-                import shutil
                 shutil.copy2(current_video, final_path)
 
         return final_path
