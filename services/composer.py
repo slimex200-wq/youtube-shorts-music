@@ -191,14 +191,59 @@ class ShortsComposer:
             raise RuntimeError(f"자막 burn-in 에러: {result.stderr[:500]}")
         return output_path
 
+    def add_title_card(
+        self,
+        video_path: Path,
+        output_path: Path,
+        title: str,
+        title_card_config: dict,
+        fonts_dir: Path,
+    ) -> Path:
+        """타이틀 카드 ASS 자막 burn-in"""
+        if not title_card_config.get("enabled", True):
+            return video_path
+
+        from services.title_card import TitleCardGenerator
+
+        gen = TitleCardGenerator()
+        ass_path = gen.generate(
+            title=title,
+            artist_name=title_card_config.get("artist_name", "Eisenherz"),
+            output_dir=video_path.parent,
+            start_sec=title_card_config.get("start_sec", 0.5),
+            duration_sec=title_card_config.get("duration_sec", 4),
+            fade_in_ms=title_card_config.get("fade_in_ms", 800),
+            fade_out_ms=title_card_config.get("fade_out_ms", 800),
+        )
+
+        escaped_ass = self._escape_ffmpeg_path(ass_path)
+        escaped_fonts = self._escape_ffmpeg_path(fonts_dir)
+
+        cmd = [
+            "ffmpeg", "-y", "-i", str(video_path),
+            "-vf", f"ass={escaped_ass}:fontsdir={escaped_fonts}",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "copy", "-movflags", "+faststart",
+            str(output_path),
+        ]
+
+        logger.info("타이틀 카드 burn-in: %s", title)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if result.returncode != 0:
+            raise RuntimeError(f"타이틀 카드 burn-in 에러: {result.stderr[:500]}")
+        return output_path
+
     def compose_full(
         self,
         project_dir: Path,
         scenes: list[dict],
         music_file: str,
         fade_out_sec: float = 0.0,
+        title: str | None = None,
+        title_card_config: dict | None = None,
     ) -> Path:
-        """전체 파이프라인: 씬 렌더 → concat → 오디오 트리밍/fade out → 음악 합치기 → (자막)"""
+        """전체 파이프라인: 씬 렌더 → concat → 오디오 트리밍/fade out → 음악 합치기 → (자막) → (타이틀 카드)"""
         assets_dir = project_dir / "assets"
         music_path = project_dir / "music" / music_file
         output_dir = project_dir / "output"
@@ -229,17 +274,37 @@ class ShortsComposer:
             merged_path = work_dir / "merged.mp4"
             self.merge_audio(concat_path, audio_for_merge, merged_path)
 
+            # 자막 처리
             srt_content = self.generate_lyrics_srt(scenes)
-            project_id = project_dir.name
-            final_path = output_dir / f"{project_id}_shorts.mp4"
-
             if srt_content:
                 srt_path = work_dir / "lyrics.srt"
                 srt_path.write_text(srt_content, encoding="utf-8")
-                self.add_subtitles(merged_path, srt_path, final_path)
+                subtitled_path = work_dir / "subtitled.mp4"
+                self.add_subtitles(merged_path, srt_path, subtitled_path)
+                current_video = subtitled_path
+            else:
+                current_video = merged_path
+
+            # 타이틀 카드 처리
+            project_id = project_dir.name
+            final_path = output_dir / f"{project_id}_shorts.mp4"
+            tc_config = title_card_config or {}
+
+            if title and tc_config.get("enabled", False):
+                fonts_dir = project_dir / "assets" / "fonts"
+                if not fonts_dir.exists():
+                    fonts_dir = Path(__file__).parent.parent / "assets" / "fonts"
+
+                self.add_title_card(
+                    video_path=current_video,
+                    output_path=final_path,
+                    title=title,
+                    title_card_config=tc_config,
+                    fonts_dir=fonts_dir,
+                )
             else:
                 import shutil
-                shutil.copy2(merged_path, final_path)
+                shutil.copy2(current_video, final_path)
 
         return final_path
 
