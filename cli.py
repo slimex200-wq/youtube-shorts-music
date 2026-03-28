@@ -20,7 +20,8 @@ def cli():
 @click.option("--lyrics", default=None, help="가사 텍스트")
 @click.option("--bpm", type=int, default=None, help="원하는 BPM")
 @click.option("--mood", default=None, help="분위기 (예: aggressive, dreamy)")
-def create(genre, style, instrumental, lyrics, bpm, mood):
+@click.option("--artist", default=None, help="아티스트명 (기본: Eisenherz)")
+def create(genre, style, instrumental, lyrics, bpm, mood, artist):
     """프로젝트 생성 + Suno 프롬프트 생성"""
     project = Project.create(genre=genre, instrumental=instrumental, lyrics=lyrics, style=style)
     project.update_status("created", step_name="create")
@@ -45,6 +46,9 @@ def create(genre, style, instrumental, lyrics, bpm, mood):
             click.echo(f"[경고] Suno 프롬프트 생성 실패: {e}")
     else:
         click.echo("[스킵] ANTHROPIC_API_KEY 없음 — Suno 프롬프트 생성 스킵")
+
+    if artist:
+        project.config["title_card"]["artist_name"] = artist
 
     project.save()
     click.echo(f"\n[프로젝트 생성] {project.id}")
@@ -189,12 +193,23 @@ def compose(project_id):
     if fade_out > 0:
         click.echo(f"[fade out] {fade_out:.0f}초")
 
+    # 제목 결정: metadata > suno_prompt > genre
+    title = None
+    if project.metadata:
+        title = project.metadata.get("title")
+    if not title and project.suno_prompt:
+        title = project.suno_prompt.get("title_suggestion")
+    if not title:
+        title = project.genre
+
     try:
         final_path = composer.compose_full(
             project_dir=project.project_dir,
             scenes=project.scenes,
             music_file=project.music_file,
             fade_out_sec=fade_out,
+            title=title,
+            title_card_config=project.config.get("title_card"),
         )
     except FileNotFoundError as e:
         click.echo(f"[에러] {e}")

@@ -124,3 +124,33 @@ def test_prompts_no_api_key(tmp_path, monkeypatch):
 
     result = runner.invoke(cli, ["prompts", project_id])
     assert "ANTHROPIC_API_KEY" in result.output
+
+
+def test_create_with_artist(tmp_path, monkeypatch):
+    """--artist 옵션이 title_card.artist_name에 저장되는지"""
+    monkeypatch.setattr("cli.PROJECTS_DIR", tmp_path)
+    monkeypatch.setattr("models.project.PROJECTS_DIR", tmp_path)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["create", "--genre", "techno", "--artist", "TestArtist"])
+    assert result.exit_code == 0
+
+    dirs = list(tmp_path.iterdir())
+    data = json.loads((dirs[0] / "project.json").read_text(encoding="utf-8"))
+    assert data["config"]["title_card"]["artist_name"] == "TestArtist"
+
+
+def test_create_default_artist(tmp_path, monkeypatch):
+    """--artist 없으면 기본값 Eisenherz"""
+    monkeypatch.setattr("cli.PROJECTS_DIR", tmp_path)
+    monkeypatch.setattr("models.project.PROJECTS_DIR", tmp_path)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["create", "--genre", "lo-fi"])
+    assert result.exit_code == 0
+
+    dirs = list(tmp_path.iterdir())
+    data = json.loads((dirs[0] / "project.json").read_text(encoding="utf-8"))
+    assert data["config"]["title_card"]["artist_name"] == "Eisenherz"
