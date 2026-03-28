@@ -38,6 +38,14 @@ class Project:
     metadata: Optional[dict] = None
     config: dict = field(default_factory=lambda: {
         "upload_privacy": "private",
+        "title_card": {
+            "enabled": True,
+            "artist_name": "Eisenherz",
+            "fade_in_ms": 800,
+            "fade_out_ms": 800,
+            "duration_sec": 4,
+            "start_sec": 0.5,
+        },
     })
     last_error: Optional[dict] = None
     _base_dir: Path = field(default=PROJECTS_DIR, repr=False)
