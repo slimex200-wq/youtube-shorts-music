@@ -173,7 +173,8 @@ def prompts(project_id):
 
 @cli.command()
 @click.argument("project_id")
-def compose(project_id):
+@click.option("--bounce", is_flag=True, help="비디오 에셋에 정방향+역방향 바운스 루프 적용")
+def compose(project_id, bounce):
     """비트 싱크 영상 조립 (9:16)"""
     from services.composer import ShortsComposer
 
@@ -190,6 +191,8 @@ def compose(project_id):
     composer = ShortsComposer()
     fade_out = project.config.get("fade_out_sec", 0.0)
     click.echo(f"[영상 조립] {len(project.scenes)}개 씬, 비트 싱크...")
+    if bounce:
+        click.echo("[바운스 루프] 비디오 에셋에 정+역방향 루프 적용")
     if fade_out > 0:
         click.echo(f"[fade out] {fade_out:.0f}초")
 
@@ -210,6 +213,7 @@ def compose(project_id):
             fade_out_sec=fade_out,
             title=title,
             title_card_config=project.config.get("title_card"),
+            bounce=bounce,
         )
     except FileNotFoundError as e:
         click.echo(f"[에러] {e}")
@@ -290,6 +294,32 @@ def upload(project_id):
     project.save()
 
     click.echo(f"[완료] https://youtube.com/shorts/{video_id}")
+
+
+@cli.command("bounce-loop")
+@click.argument("clip", type=click.Path(exists=True))
+@click.option("-o", "--output", default=None, type=click.Path(), help="출력 파일 경로")
+@click.option("-r", "--repeat", default=30, type=int, help="반복 횟수 (기본: 30)")
+def bounce_loop(clip, output, repeat):
+    """클립을 정방향+역방향 바운스 루프로 만들고 N번 반복"""
+    from services.composer import ShortsComposer
+
+    clip_path = Path(clip)
+    if output:
+        output_path = Path(output)
+    else:
+        output_path = clip_path.parent / f"{clip_path.stem}_loop.mp4"
+
+    composer = ShortsComposer()
+    click.echo(f"[바운스 루프] {clip_path.name} x{repeat}")
+
+    try:
+        result = composer.bounce_loop(clip_path, output_path, repeat)
+    except Exception as e:
+        click.echo(f"[에러] {e}")
+        return
+
+    click.echo(f"[완료] {result}")
 
 
 @cli.command()

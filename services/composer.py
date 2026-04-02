@@ -1,5 +1,6 @@
 """YouTube Shorts 9:16 비트 싱크 영상 조립기"""
 import logging
+import math
 import shutil
 import subprocess
 import tempfile
@@ -56,8 +57,18 @@ class ShortsComposer:
             idx += 1
         return "\n".join(srt_lines)
 
+    def calc_bounce_repeats(self, clip_duration: float, scene_duration: float) -> int:
+        """바운스(정+역) 1회 길이 기준으로 씬을 채우는 반복 횟수 계산"""
+        bounce_duration = clip_duration * 2
+        return max(1, math.ceil(scene_duration / bounce_duration))
+
     def build_scene_cmd(
-        self, asset_path: Path, duration: float, output_path: Path
+        self,
+        asset_path: Path,
+        duration: float,
+        output_path: Path,
+        bounce: bool = False,
+        asset_duration: float | None = None,
     ) -> list[str]:
         """씬 하나의 FFmpeg 명령어 생성 (오디오 없이 비주얼만)"""
         is_video = asset_path.suffix.lower() in SUPPORTED_VIDEO_EXTS
@@ -66,7 +77,22 @@ class ShortsComposer:
             f"pad={WIDTH}:{HEIGHT}:(ow-iw)/2:(oh-ih)/2"
         )
 
-        if is_video:
+        if is_video and bounce and asset_duration:
+            repeats = self.calc_bounce_repeats(asset_duration, duration)
+            return [
+                "ffmpeg", "-y",
+                "-stream_loop", str(repeats),
+                "-i", str(asset_path),
+                "-filter_complex",
+                f"[0:v]{scale_filter}[s];[s]reverse[r];[s][r]concat=n=2:v=1:a=0[out]",
+                "-map", "[out]",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                "-preset", "fast", "-crf", "23",
+                "-an", "-t", str(duration),
+                "-movflags", "+faststart",
+                str(output_path),
+            ]
+        elif is_video:
             return [
                 "ffmpeg", "-y",
                 "-i", str(asset_path),
@@ -94,17 +120,40 @@ class ShortsComposer:
                 str(output_path),
             ]
 
+    def _probe_duration(self, path: Path) -> float | None:
+        """ffprobe로 영상 길이(초) 조회"""
+        cmd = [
+            "ffprobe", "-v", "quiet",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            str(path),
+        ]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            if result.returncode == 0 and result.stdout.strip():
+                return float(result.stdout.strip())
+        except (subprocess.TimeoutExpired, ValueError):
+            pass
+        return None
+
     def compose_scene(
-        self, scene: dict, assets_dir: Path, work_dir: Path
+        self, scene: dict, assets_dir: Path, work_dir: Path, bounce: bool = False
     ) -> Path:
         """씬 하나를 비주얼 클립으로 렌더링 (오디오 없음)"""
         asset_path = assets_dir / scene["asset_file"]
         output_path = work_dir / f"clip_{scene['id']:02d}.mp4"
         duration = scene["end_sec"] - scene["start_sec"]
 
-        cmd = self.build_scene_cmd(asset_path, duration, output_path)
+        asset_duration = None
+        if bounce and asset_path.suffix.lower() in SUPPORTED_VIDEO_EXTS:
+            asset_duration = self._probe_duration(asset_path)
 
-        logger.info("씬 %d 클립 생성 (%.1f초)", scene["id"], duration)
+        cmd = self.build_scene_cmd(
+            asset_path, duration, output_path,
+            bounce=bounce, asset_duration=asset_duration,
+        )
+
+        logger.info("씬 %d 클립 생성 (%.1f초%s)", scene["id"], duration, " bounce" if bounce else "")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         if result.returncode != 0:
             raise RuntimeError(f"FFmpeg 에러 (씬 {scene['id']}): {result.stderr[:500]}")
@@ -182,7 +231,7 @@ class ShortsComposer:
         style = self.get_subtitle_style()
         cmd = [
             "ffmpeg", "-y", "-i", str(video_path),
-            "-vf", f"subtitles={self._escape_ffmpeg_path(srt_path)}:force_style='{style}'",
+            "-vf", f"subtitles={self._escape_ffmpeg_path(srt_path)}:charenc=UTF-8:force_style='{style}'",
             "-c:v", "libx264", "-preset", "fast", "-crf", "23",
             "-c:a", "copy", "-movflags", "+faststart",
             str(output_path),
@@ -243,6 +292,7 @@ class ShortsComposer:
         fade_out_sec: float = 0.0,
         title: str | None = None,
         title_card_config: dict | None = None,
+        bounce: bool = False,
     ) -> Path:
         """전체 파이프라인: 씬 렌더 → concat → 오디오 트리밍/fade out → 음악 합치기 → (자막) → (타이틀 카드)"""
         assets_dir = project_dir / "assets"
@@ -257,7 +307,7 @@ class ShortsComposer:
 
             clips = []
             for scene in scenes:
-                clip = self.compose_scene(scene, assets_dir, work_dir)
+                clip = self.compose_scene(scene, assets_dir, work_dir, bounce=bounce)
                 clips.append(clip)
 
             concat_path = work_dir / "concat.mp4"
@@ -307,6 +357,55 @@ class ShortsComposer:
                 shutil.copy2(current_video, final_path)
 
         return final_path
+
+    def build_bounce_cmd(self, clip_path: Path, output_path: Path) -> list[str]:
+        """정방향+역방향 바운스 루프 FFmpeg 명령어 생성"""
+        return [
+            "ffmpeg", "-y",
+            "-i", str(clip_path),
+            "-filter_complex",
+            "[0:v]reverse[r];[0:v][r]concat=n=2:v=1:a=0[out]",
+            "-map", "[out]",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            str(output_path),
+        ]
+
+    def build_stream_loop_cmd(
+        self, clip_path: Path, output_path: Path, repeat: int = 30
+    ) -> list[str]:
+        """바운스 클립을 N번 반복하는 FFmpeg 명령어 생성"""
+        return [
+            "ffmpeg", "-y",
+            "-stream_loop", str(repeat),
+            "-i", str(clip_path),
+            "-c", "copy",
+            "-movflags", "+faststart",
+            str(output_path),
+        ]
+
+    def bounce_loop(
+        self, clip_path: Path, output_path: Path, repeat: int = 30
+    ) -> Path:
+        """클립 → 정방향+역방향 바운스 → N번 반복해서 긴 영상 생성"""
+        work_dir = output_path.parent
+
+        bounce_path = work_dir / f"_bounce_{clip_path.stem}.mp4"
+        cmd = self.build_bounce_cmd(clip_path, bounce_path)
+        logger.info("바운스 루프 생성: %s", clip_path.name)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if result.returncode != 0:
+            raise RuntimeError(f"바운스 루프 에러: {result.stderr[:500]}")
+
+        cmd = self.build_stream_loop_cmd(bounce_path, output_path, repeat)
+        logger.info("스트림 루프 %d회 반복", repeat)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        if result.returncode != 0:
+            raise RuntimeError(f"스트림 루프 에러: {result.stderr[:500]}")
+
+        bounce_path.unlink(missing_ok=True)
+        return output_path
 
     @staticmethod
     def _escape_ffmpeg_path(path: Path) -> str:

@@ -225,14 +225,19 @@ async def assets_status(pid: str):
     return {"scenes": result}
 
 
+class ComposeRequest(BaseModel):
+    bounce: bool = False
+
+
 @app.post("/api/projects/{pid}/compose")
-async def compose_video(pid: str):
+async def compose_video(pid: str, req: ComposeRequest | None = None):
     from services.composer import ShortsComposer
 
     project = _load(pid)
     if not project.music_file:
         raise HTTPException(400, "No music file.")
 
+    bounce = req.bounce if req else False
     composer = ShortsComposer()
     fade_out = project.config.get("fade_out_sec", 0.0)
     try:
@@ -241,6 +246,7 @@ async def compose_video(pid: str):
             scenes=project.scenes,
             music_file=project.music_file,
             fade_out_sec=fade_out,
+            bounce=bounce,
         )
     except FileNotFoundError as e:
         raise HTTPException(400, str(e))

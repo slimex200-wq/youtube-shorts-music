@@ -71,7 +71,7 @@ class TitleCardGenerator:
         )
 
         output_path = output_dir / "title_card.ass"
-        output_path.write_text(content, encoding="utf-8")
+        output_path.write_bytes(b"\xef\xbb\xbf" + content.encode("utf-8"))
         logger.info("타이틀 카드 ASS 생성: %s", output_path)
         return output_path
 

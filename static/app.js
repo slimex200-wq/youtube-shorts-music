@@ -339,6 +339,11 @@ function renderStepAssets(p) {
         <span class="dropzone-label">Drop images or click</span>
         <input type="file" accept=".png,.jpg,.jpeg,.webp,.mp4,.mov" multiple style="display:none">
       </div>
+      <label class="form-check bounce-toggle">
+        <input type="checkbox" id="bounce-check">
+        Bounce Loop
+        <span class="text-3 text-sm">(forward+reverse repeat for video assets)</span>
+      </label>
       <button class="btn btn-primary" id="compose-btn" onclick="handleCompose()">
         Compose Video
       </button>
@@ -473,10 +478,10 @@ async function handleCompose() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Composing...';
 
-  const content = document.getElementById('step-content');
+  const bounce = document.getElementById('bounce-check')?.checked || false;
 
   try {
-    currentProject = await api('POST', `/projects/${currentProject.id}/compose`);
+    currentProject = await api('POST', `/projects/${currentProject.id}/compose`, { bounce });
     renderProject();
   } catch (err) {
     alert(err.message);
