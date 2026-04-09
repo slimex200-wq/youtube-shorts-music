@@ -21,7 +21,8 @@ def cli():
 @click.option("--bpm", type=int, default=None, help="원하는 BPM")
 @click.option("--mood", default=None, help="분위기 (예: aggressive, dreamy)")
 @click.option("--artist", default=None, help="아티스트명 (기본: Eisenherz)")
-def create(genre, style, instrumental, lyrics, bpm, mood, artist):
+@click.option("--substyle", default=None, help="shranz 서브스타일 (예: acid_schranz, emo_schranz, peak_time)")
+def create(genre, style, instrumental, lyrics, bpm, mood, artist, substyle):
     """프로젝트 생성 + Suno 프롬프트 생성"""
     project = Project.create(genre=genre, instrumental=instrumental, lyrics=lyrics, style=style)
     project.update_status("created", step_name="create")
@@ -31,17 +32,20 @@ def create(genre, style, instrumental, lyrics, bpm, mood, artist):
 
     if cfg.anthropic_api_key:
         from services.suno_prompt import SunoPromptGenerator
-        gen = SunoPromptGenerator(cfg.anthropic_api_key)
+        gen = SunoPromptGenerator(cfg.anthropic_api_key, projects_dir=str(PROJECTS_DIR))
         click.echo(f"[Suno 프롬프트 생성] {genre}...")
         try:
             suno_prompt = gen.generate(
                 genre=genre, bpm=bpm, mood=mood,
                 lyrics=lyrics, instrumental=instrumental,
+                substyle=substyle,
             )
             project.suno_prompt = suno_prompt
             click.echo(f"[Style] {suno_prompt['style']}")
             click.echo(f"[제목 제안] {suno_prompt.get('title_suggestion', '-')}")
             click.echo(f"[BPM 제안] {suno_prompt.get('bpm_suggestion', '-')}")
+            if suno_prompt.get("substyle"):
+                click.echo(f"[서브스타일] {suno_prompt['substyle']}")
         except Exception as e:
             click.echo(f"[경고] Suno 프롬프트 생성 실패: {e}")
     else:
@@ -235,6 +239,7 @@ def compose(project_id, bounce):
                 title_suggestion=project.suno_prompt.get("title_suggestion", "") if project.suno_prompt else "",
                 lyrics=project.lyrics,
                 instrumental=project.instrumental,
+                substyle=project.suno_prompt.get("substyle") if project.suno_prompt else None,
             )
             click.echo(f"[메타데이터] {project.metadata['title']}")
         except Exception as e:
@@ -342,6 +347,24 @@ def status(project_id):
         click.echo(f"[제목] {project.metadata.get('title', '-')}")
     if project.last_error:
         click.echo(f"[에러] {project.last_error['step']}: {project.last_error['message']}")
+
+
+@cli.command("substyles")
+def list_substyles():
+    """사용 가능한 shranz 서브스타일 목록"""
+    from services.shranz_substyles import SUBSTYLES, get_used_substyles_from_projects
+
+    used = get_used_substyles_from_projects(str(PROJECTS_DIR))
+    used_counts: dict[str, int] = {}
+    for name in used:
+        used_counts[name] = used_counts.get(name, 0) + 1
+
+    click.echo("사용 가능한 shranz 서브스타일:\n")
+    for s in SUBSTYLES:
+        count = used_counts.get(s.name, 0)
+        marker = f" (x{count})" if count else ""
+        click.echo(f"  {s.name:<22} {s.bpm_range[0]}-{s.bpm_range[1]} BPM  {s.label}{marker}")
+    click.echo(f"\n사용법: python cli.py create --genre shranz --substyle <name>")
 
 
 @cli.command("list")

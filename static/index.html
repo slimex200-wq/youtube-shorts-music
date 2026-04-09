@@ -102,13 +102,12 @@
           <option value="watercolor">Watercolor</option>
         </select>
       </div>
-      <label class="form-check mt-12">
-        <input type="checkbox" name="instrumental" checked onchange="toggleLyrics(this)">
-        Instrumental
-      </label>
-      <div class="form-group mt-12 hidden" id="lyrics-group">
-        <label class="form-label">Lyrics</label>
-        <textarea class="form-input" name="lyrics" rows="3" placeholder="Enter lyrics"></textarea>
+      <div class="form-group mt-12 hidden" id="substyle-group">
+        <label class="form-label">Shranz Substyle</label>
+        <select class="form-input" name="substyle" id="substyle-select">
+          <option value="">Auto (avoid recent)</option>
+        </select>
+        <div class="text-sm text-3" style="margin-top:4px" id="substyle-hint"></div>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" onclick="hideCreateModal()">Cancel</button>

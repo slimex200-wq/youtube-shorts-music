@@ -36,8 +36,11 @@ class MetadataGenerator:
         title_suggestion: str = "",
         lyrics: str = None,
         instrumental: bool = False,
+        substyle: str = None,
     ) -> dict:
         user_prompt = f"장르: {genre}\n"
+        if substyle:
+            user_prompt += f"서브스타일: {substyle}\n"
         if title_suggestion:
             user_prompt += f"곡 제목: {title_suggestion}\n"
         if instrumental:

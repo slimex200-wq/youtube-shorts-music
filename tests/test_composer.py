@@ -13,12 +13,31 @@ def test_match_assets(tmp_path):
         {"id": 2, "asset_file": None},
     ]
     composer = ShortsComposer()
-    matched = composer.match_assets(scenes, assets_dir)
+    matched, missing = composer.match_assets(scenes, assets_dir)
     assert matched[0]["asset_file"] == "scene_01.png"
     assert matched[1]["asset_file"] == "scene_02.mp4"
+    assert missing == []
 
 
-def test_match_assets_missing(tmp_path):
+def test_match_assets_partial(tmp_path):
+    """일부 에셋만 있으면 있는 씬만 반환, missing 목록 포함"""
+    assets_dir = tmp_path / "assets"
+    assets_dir.mkdir()
+    (assets_dir / "scene_01.png").write_bytes(b"img")
+
+    scenes = [
+        {"id": 1, "asset_file": None},
+        {"id": 2, "asset_file": None},
+    ]
+    composer = ShortsComposer()
+    matched, missing = composer.match_assets(scenes, assets_dir)
+    assert len(matched) == 1
+    assert matched[0]["asset_file"] == "scene_01.png"
+    assert missing == ["scene_02"]
+
+
+def test_match_assets_none_raises(tmp_path):
+    """에셋이 하나도 없으면 FileNotFoundError"""
     assets_dir = tmp_path / "assets"
     assets_dir.mkdir()
 
@@ -27,8 +46,8 @@ def test_match_assets_missing(tmp_path):
     try:
         composer.match_assets(scenes, assets_dir)
         assert False, "Should raise"
-    except FileNotFoundError as e:
-        assert "scene_01" in str(e)
+    except FileNotFoundError:
+        pass
 
 
 def test_generate_srt_from_lyrics():

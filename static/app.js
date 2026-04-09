@@ -34,7 +34,7 @@ async function loadDashboard() {
   list.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
   try {
-    const projects = await api('GET', '/projects');
+    const projects = (await api('GET', '/projects')).reverse();
     if (!projects.length) {
       list.innerHTML = `
         <div class="empty-state">
@@ -77,12 +77,20 @@ function statusBadge(status) {
 
 function showCreateModal() {
   document.getElementById('create-modal').classList.remove('hidden');
-  document.querySelector('#create-form [name=genre]').focus();
+  const genreInput = document.querySelector('#create-form [name=genre]');
+  genreInput.focus();
+  if (!genreInput._substyleWired) {
+    genreInput._substyleWired = true;
+    genreInput.addEventListener('input', updateSubstyleVisibility);
+  }
+  updateSubstyleVisibility();
 }
 
 function hideCreateModal() {
   document.getElementById('create-modal').classList.add('hidden');
   document.getElementById('create-form').reset();
+  document.getElementById('substyle-group').classList.add('hidden');
+  document.getElementById('substyle-hint').textContent = '';
 }
 
 async function handleCreate(e) {
@@ -93,13 +101,12 @@ async function handleCreate(e) {
   btn.innerHTML = '<span class="spinner"></span> Creating...';
 
   const fd = new FormData(form);
-  const instrumental = fd.has('instrumental');
   const style = fd.get('style') || null;
+  const substyle = fd.get('substyle') || null;
   const body = {
     genre: fd.get('genre'),
     style,
-    instrumental,
-    lyrics: !instrumental && fd.get('lyrics') ? fd.get('lyrics') : null,
+    substyle,
   };
 
   try {
@@ -234,16 +241,19 @@ function renderSunoPrompt(p) {
       </div>
       <div class="prompt-card-value">${esc(sp.prompt)}</div>
     </div>
-    <div class="form-row mb-12">
-      <div class="prompt-card">
-        <div class="prompt-card-title">Title</div>
-        <div class="prompt-card-value">${esc(sp.title_suggestion || '-')}</div>
-      </div>
-      <div class="prompt-card">
-        <div class="prompt-card-title">BPM</div>
-        <div class="prompt-card-value">${sp.bpm_suggestion || '-'}</div>
-      </div>
+    <div class="prompt-card mb-12">
+      <div class="prompt-card-title">Title</div>
+      <div class="prompt-card-value">${esc(sp.title_suggestion || '-')}</div>
     </div>
+    ${sp.lyrics ? `
+    <div class="prompt-card mb-12" data-copy="${attr(sp.lyrics)}">
+      <div class="flex-between">
+        <div class="prompt-card-title">Lyrics</div>
+        <button class="copy-btn" onclick="copyText(this)">Copy</button>
+      </div>
+      <div class="prompt-card-value" style="white-space:pre-line">${esc(sp.lyrics)}</div>
+    </div>
+    ` : ''}
     ${renderSunoOptions(sp)}
     <div class="text-sm text-3 mb-12 mt-16">
       Copy the prompt above to Suno, create your track, then upload the MP3 below.
@@ -253,12 +263,13 @@ function renderSunoPrompt(p) {
 
 function renderSunoOptions(sp) {
   const items = [];
-  if (sp.exclude_styles) items.push(['Exclude', esc(sp.exclude_styles)]);
-  if (sp.vocal_gender) items.push(['Vocal', esc(sp.vocal_gender)]);
+  if (sp.substyle) items.push(['Substyle', esc(sp.substyle)]);
+  if (sp.bpm_suggestion) items.push(['BPM', sp.bpm_suggestion]);
+  items.push(['Vocal Gender', sp.vocal_gender ? esc(sp.vocal_gender) : 'Instrumental']);
   if (sp.lyrics_mode) items.push(['Lyrics Mode', esc(sp.lyrics_mode)]);
+  if (sp.exclude_styles) items.push(['Exclude', esc(sp.exclude_styles)]);
   if (sp.weirdness != null) items.push(['Weirdness', sp.weirdness + '%']);
   if (sp.style_influence != null) items.push(['Style Influence', sp.style_influence + '%']);
-  if (!items.length) return '';
   return `
     <div class="suno-options mb-12">
       <div class="prompt-card-title" style="margin-bottom:10px">Suno Options</div>
@@ -552,10 +563,6 @@ function copyText(btn) {
 
 // --- Toggle ---
 
-function toggleLyrics(checkbox) {
-  document.getElementById('lyrics-group').classList.toggle('hidden', checkbox.checked);
-}
-
 // --- Tab switching ---
 
 let currentTab = 'shorts';
@@ -684,5 +691,69 @@ async function loadEditorHistory() {
   } catch (_) {}
 }
 
+// --- Substyle ---
+
+const SHRANZ_ALIASES = ['shranz', 'schranz', 'hard techno', 'hardtechno', 'hard-techno', 'dark shranz', 'new shrantz', 'new shranz'];
+let substyleCache = null;
+
+function isShranzGenre(genre) {
+  const g = (genre || '').toLowerCase().trim();
+  return SHRANZ_ALIASES.some(a => g.includes(a));
+}
+
+async function loadSubstyles() {
+  if (substyleCache) return substyleCache;
+  try {
+    substyleCache = await api('GET', '/substyles');
+  } catch (_) {
+    substyleCache = [];
+  }
+  return substyleCache;
+}
+
+async function updateSubstyleVisibility() {
+  const genreInput = document.querySelector('#create-form [name=genre]');
+  const group = document.getElementById('substyle-group');
+  const select = document.getElementById('substyle-select');
+  const hint = document.getElementById('substyle-hint');
+  if (!genreInput || !group) return;
+
+  const show = isShranzGenre(genreInput.value);
+  group.classList.toggle('hidden', !show);
+
+  if (show && select.options.length <= 1) {
+    const substyles = await loadSubstyles();
+    select.innerHTML = '<option value="">Auto (avoid recent)</option>';
+    for (const s of substyles) {
+      const used = s.used_count ? ` (x${s.used_count})` : '';
+      const opt = document.createElement('option');
+      opt.value = s.name;
+      opt.textContent = `${s.label} [${s.bpm_range[0]}-${s.bpm_range[1]} BPM]${used}`;
+      select.appendChild(opt);
+    }
+  }
+
+  if (show) {
+    select.addEventListener('change', () => {
+      const substyles = substyleCache || [];
+      const selected = substyles.find(s => s.name === select.value);
+      hint.textContent = selected ? selected.mood : '';
+    }, { once: false });
+  }
+}
+
 // --- Init ---
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Genre input change → toggle substyle selector
+  const observer = new MutationObserver(() => {
+    const genreInput = document.querySelector('#create-form [name=genre]');
+    if (genreInput && !genreInput._substyleWired) {
+      genreInput._substyleWired = true;
+      genreInput.addEventListener('input', updateSubstyleVisibility);
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+});
+
 loadDashboard();

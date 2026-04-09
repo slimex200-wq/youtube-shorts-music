@@ -31,16 +31,77 @@ Same as image_prompt, plus:
 - Pacing hint: "slow and dreamy" vs "rapid cuts" to match BPM.
 
 # Genre → Visual Vocabulary
-Map the genre to a coherent visual world. Examples:
-- lo-fi hip hop → cozy room interiors, rain on window, warm analog tones, soft bokeh, Studio Ghibli influence
-- dark trap → deserted urban streets, neon signs, wet asphalt, high contrast, teal-and-orange split toning
-- acid techno → underground warehouse, laser grids, CRT green phosphor, industrial textures, glitch artifacts
-- R&B / soul → golden hour skin tones, silk fabrics, candlelight, shallow depth of field, intimate framing
-- k-pop → hyper-saturated candy colors, clean studio lighting, bold graphic shapes, fashion editorial
-- ambient / chill → vast landscapes, fog, aerial drone shots, muted pastels, slow dissolve transitions
-- rock / punk → gritty film grain, high ISO noise, stage smoke, harsh flash, dutch angle
-- shranz / schranz / hard techno → underground warehouse, industrial concrete, laser grids, CRT phosphor green, distorted glitch textures, strobe flash, brutalist architecture
-Use these as starting points; adapt and blend based on the specific mood and keywords provided.
+Map the genre to a coherent visual world. Each genre has MULTIPLE environment/subject options — pick DIFFERENT ones per scene. Never reuse the same setting in consecutive scenes.
+
+## lo-fi hip hop
+Environments: cozy bedroom with desk lamp, rooftop at dusk overlooking city, rainy cafe window booth, vinyl record shop interior, quiet library corner, train window at night, balcony with hanging plants
+Textures: warm analog film grain, soft bokeh, VHS tape artifacts, dusty vinyl crackle overlay, watercolor wash edges
+Palette: warm amber, muted terracotta, soft cream, faded denim blue, sage green
+Lighting: warm tungsten desk lamp, golden hour diffused, neon sign glow through rain, soft overcast window light
+
+## dark trap
+Environments: abandoned parking garage at 3am, rain-slicked alley with flickering neon, empty rooftop helipad, fog-filled underpass, luxury car interior at night, dimly lit recording studio, desolate highway overpass
+Textures: wet reflections on asphalt, chrome and glass surfaces, smoke trails, shattered glass, metallic paint drips
+Palette: deep black, teal, burnt orange, neon violet, blood red accents
+Lighting: single harsh streetlamp, neon sign reflection pools, headlight beams through fog, underlighting from phone screen
+
+## acid techno
+Environments: underground warehouse rave, fluorescent-lit subway tunnel, abandoned swimming pool with projection mapping, server room corridors, chemical plant at night, concrete skatepark with UV lights
+Textures: CRT scanlines, data moshing glitch, phosphor green glow, acid-etched metal, VHS tracking errors, liquid crystal patterns
+Palette: toxic green, electric cyan, phosphor white, deep purple, acid yellow
+Lighting: UV blacklight, strobe freeze-frame, laser grid projections, oscillating LED tubes, emergency exit red
+
+## R&B / soul
+Environments: candlelit bedroom with silk curtains, rooftop pool at golden hour, vintage recording studio with wood panels, slow-dance ballroom, bathwater with rose petals, sunset beach boardwalk
+Textures: silk and satin fabric folds, condensation on glass, warm skin tones, gold jewelry glint, analog film halation
+Palette: warm gold, deep burgundy, chocolate brown, blush pink, honey amber
+Lighting: candlelight flicker, golden hour backlight through curtains, warm spotlight with lens diffusion, fireplace glow
+
+## k-pop
+Environments: glossy white photo studio, candy-colored set pieces, holographic stage with LED floor, retro diner in pastel, rooftop garden with neon art installations, mirror room infinity reflections
+Textures: clean sharp edges, metallic chrome accents, holographic foil, confetti freeze-frame, bubble reflections
+Palette: hot pink, electric blue, mint green, sunflower yellow, pure white, lavender
+Lighting: ring light beauty, multi-color LED wash, clean studio flash, RGB strip accents, backlit silhouette
+
+## ambient / chill
+Environments: fog-blanketed mountain lake, aurora borealis over snow field, underwater kelp forest, cloud layer from above, moss-covered forest floor, desert dunes at blue hour, glacial ice cave
+Textures: soft focus lens blur, mist diffusion, light leak film artifacts, watercolor dissolved edges, frost crystal macro
+Palette: slate blue, sage green, dusty rose, pearl grey, ice white, lavender mist
+Lighting: diffused overcast, bioluminescent glow, twilight blue hour, soft volumetric god rays, moonlight reflection on water
+
+## rock / punk
+Environments: dive bar stage with duct-taped mic, garage rehearsal space, mosh pit from above, graffiti alley at night, tour van interior, rooftop with city skyline, record store basement show
+Textures: high ISO noise grain, torn poster layers, scratched leather, amp distortion visualization, sticker-bombed surface, cigarette smoke
+Palette: black, fire engine red, safety yellow, bruise purple, raw concrete grey
+Lighting: harsh on-camera flash, single bare bulb, stage par can with haze, flickering fluorescent tube, match flame in dark
+
+## edm
+Environments: massive festival stage with CO2 cannons, beach club at sunset, neon tunnel DJ set, pool party aerial, desert rave at dawn, ice hotel DJ booth, rooftop club overlooking skyline
+Textures: confetti and glitter freeze-frame, laser beam trails, LED panel pixel grids, water splash freeze, pyrotechnic spark trails
+Palette: electric blue, magenta, lime green, pure white, UV purple
+Lighting: moving head beam arrays, CO2 cannon backlight, sunrise golden rim, laser fan patterns, LED wristband crowd glow
+
+## shranz / schranz / hard techno → See "Schranz Visual Vocabulary" section below for substyle-specific visuals.
+
+Use these as starting points; adapt and blend based on the specific mood and keywords provided. For genres not listed, derive a visual vocabulary from the genre's cultural context and sonic character.
+
+# Schranz Visual Vocabulary (by substyle)
+Each schranz substyle has a DISTINCT visual world. Do NOT default to "warehouse + lasers" for everything.
+
+- classic_german → raw concrete bunker, single overhead industrial lamp, claustrophobic corridor, grey-on-grey monotone, analog CCTV grain, cold fluorescent flicker, Berlin U-Bahn tunnel aesthetic
+- emo_schranz → neon-lit rain on glass, emotional bokeh city lights, silhouette against LED wall, split-toning teal/magenta, cinematic anamorphic lens flare, moody portrait lighting
+- industrial_schranz → rusted steel mill, molten metal pour, slag heap at night, furnace glow orange-black, crane silhouettes, iron oxide textures, thermal camera palette
+- acid_schranz → liquid mercury surfaces, UV blacklight reactive paint splatter, chemical iridescence, microscopic crystal structures, psychedelic color inversion, oil-on-water rainbow
+- hardgroove → vinyl record macro, DJ booth low-angle, turntable needle close-up, warm amber club lighting, sweat on skin, handheld camera shake, intimate dancefloor energy
+- deep_hardtechno → deep underground cave system, bioluminescent fungi, subterranean lake reflection, pitch darkness with single light source, mist rising from below, cavernous echo visual
+- peak_time → massive festival main stage, CO2 cannon blast, confetti explosion, stadium laser array, crowd hands from stage POV, pyrotechnic sparks, wide-angle lens distortion
+- tekk → abandoned squat party, DIY sound system stacks, spray-painted walls, handheld flashlight in dark, raw concrete with graffiti, chaotic energy, fisheye lens
+- trancecore_hybrid → 90s rave nostalgia, smiley face motifs, VHS recording artifacts, warehouse with colored gels, euphoric crowd aerial shot, retro CRT monitor glow, candy raver aesthetic
+- noise_experimental → abstract data visualization, oscilloscope waveforms, circuit board macro, white noise static pattern, scientific lab equipment, electron microscope textures
+- latin_schranz → fire dancers at night, tribal masks with LED eyes, desert rave at sunset, bonfire sparks rising, earth-tone body paint, drum circle silhouettes, ritual geometry
+- ebm_schranz → brutalist architecture facades, marching formation shadows, monochrome high contrast, leather texture macro, cold steel and glass, geometric repetition, surveillance aesthetic
+
+Pick visuals that match the substyle indicated in the suno_prompt. If no substyle is given, vary across the full vocabulary — do NOT repeat the same environment across scenes.
 
 # Art Style Override
 If the user specifies an art style (e.g. "anime"), apply it consistently to ALL scenes:
@@ -101,6 +162,8 @@ class PromptGenerator:
 
         if suno_prompt:
             user_prompt += f"곡 분위기: {suno_prompt.get('prompt', '')}\n"
+            if suno_prompt.get("substyle"):
+                user_prompt += f"서브스타일: {suno_prompt['substyle']} — 이 서브스타일의 비주얼 보캐뷸러리를 사용하세요.\n"
 
         if instrumental:
             user_prompt += "Instrumental (가사 없음) — lyrics_line은 모두 null로.\n"

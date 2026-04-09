@@ -20,6 +20,7 @@ class CreateRequest(BaseModel):
     lyrics: str | None = None
     bpm: int | None = None
     mood: str | None = None
+    substyle: str | None = None
 
 
 def _serialize(p: Project) -> dict:
@@ -62,7 +63,7 @@ async def create_project(req: CreateRequest):
     if cfg.anthropic_api_key:
         from services.suno_prompt import SunoPromptGenerator
 
-        gen = SunoPromptGenerator(cfg.anthropic_api_key)
+        gen = SunoPromptGenerator(cfg.anthropic_api_key, projects_dir=str(PROJECTS_DIR))
         try:
             project.suno_prompt = gen.generate(
                 genre=req.genre,
@@ -70,6 +71,7 @@ async def create_project(req: CreateRequest):
                 mood=req.mood,
                 lyrics=req.lyrics,
                 instrumental=req.instrumental,
+                substyle=req.substyle,
             )
         except Exception:
             pass
@@ -104,7 +106,15 @@ async def update_project(pid: str, req: UpdateRequest):
 @app.delete("/api/projects/{pid}")
 async def delete_project(pid: str):
     p = _load(pid)
-    shutil.rmtree(p.project_dir)
+    try:
+        shutil.rmtree(p.project_dir)
+    except PermissionError:
+        # Windows: 열린 파일이 있으면 재시도
+        import gc
+        import time
+        gc.collect()
+        time.sleep(0.5)
+        shutil.rmtree(p.project_dir, ignore_errors=True)
     return {"ok": True}
 
 
@@ -268,6 +278,7 @@ async def compose_video(pid: str, req: ComposeRequest | None = None):
                 ),
                 lyrics=project.lyrics,
                 instrumental=project.instrumental,
+                substyle=project.suno_prompt.get("substyle") if project.suno_prompt else None,
             )
         except Exception:
             pass
@@ -284,6 +295,30 @@ async def download_video(pid: str):
     if not finals:
         raise HTTPException(404, "No output video")
     return FileResponse(finals[0], media_type="video/mp4", filename=finals[0].name)
+
+
+# --- Substyles API ---
+
+
+@app.get("/api/substyles")
+async def list_substyles():
+    from services.shranz_substyles import SUBSTYLES, get_used_substyles_from_projects
+
+    used = get_used_substyles_from_projects(str(PROJECTS_DIR))
+    used_counts: dict[str, int] = {}
+    for name in used:
+        used_counts[name] = used_counts.get(name, 0) + 1
+
+    return [
+        {
+            "name": s.name,
+            "label": s.label,
+            "bpm_range": list(s.bpm_range),
+            "mood": s.mood,
+            "used_count": used_counts.get(s.name, 0),
+        }
+        for s in SUBSTYLES
+    ]
 
 
 # --- Editor API ---

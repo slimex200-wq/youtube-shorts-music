@@ -17,25 +17,31 @@ HEIGHT = 1920
 
 
 class ShortsComposer:
-    def match_assets(self, scenes: list[dict], assets_dir: Path) -> list[dict]:
+    def match_assets(self, scenes: list[dict], assets_dir: Path) -> tuple[list[dict], list[str]]:
+        """에셋 매칭. 에셋이 있는 씬만 반환하고, missing 목록도 함께 반환."""
+        matched_scenes = []
         missing = []
         for scene in scenes:
             scene_id = scene["id"]
-            matched = False
+            found = False
             for ext in sorted(SUPPORTED_EXTS):
                 candidate = assets_dir / f"scene_{scene_id:02d}{ext}"
                 if candidate.exists():
                     scene["asset_file"] = candidate.name
-                    matched = True
+                    found = True
                     break
-            if not matched:
+            if found:
+                matched_scenes.append(scene)
+            else:
                 missing.append(f"scene_{scene_id:02d}")
-        if missing:
+        if not matched_scenes:
             raise FileNotFoundError(
-                f"에셋 누락: {', '.join(missing)}\n"
+                f"에셋이 하나도 없습니다.\n"
                 f"지원 포맷: {', '.join(sorted(SUPPORTED_EXTS))}"
             )
-        return scenes
+        if missing:
+            logger.warning("에셋 누락 씬 스킵: %s", ", ".join(missing))
+        return matched_scenes, missing
 
     def get_subtitle_style(self) -> str:
         return (
@@ -84,7 +90,7 @@ class ShortsComposer:
                 "-stream_loop", str(repeats),
                 "-i", str(asset_path),
                 "-filter_complex",
-                f"[0:v]{scale_filter}[s];[s]reverse[r];[s][r]concat=n=2:v=1:a=0[out]",
+                f"[0:v]{scale_filter},split[fwd][rev];[rev]reverse[r];[fwd][r]concat=n=2:v=1:a=0[out]",
                 "-map", "[out]",
                 "-c:v", "libx264", "-pix_fmt", "yuv420p",
                 "-preset", "fast", "-crf", "23",
@@ -300,7 +306,7 @@ class ShortsComposer:
         output_dir = project_dir / "output"
         output_dir.mkdir(exist_ok=True)
 
-        scenes = self.match_assets(scenes, assets_dir)
+        scenes, missing = self.match_assets(scenes, assets_dir)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             work_dir = Path(tmpdir)
