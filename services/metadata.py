@@ -13,6 +13,7 @@ SYSTEM_PROMPT = """당신은 YouTube Shorts 음악 채널 SEO 전문가입니다
 - title: 곡 제목 + 분위기 이모지 + #Shorts 포함. 최대 100자.
 - description: 곡 설명 1~2줄 + 해시태그. 간결하게.
 - tags: 장르 관련 + 분위기 관련 + "Shorts" 포함. 10~15개.
+- first_comment: 운영자가 고정으로 거는 첫 댓글. 2~4줄. 짧은 인사/분위기 묘사 + 구독·좋아요 유도 + 해시태그 묶음. 친근한 톤. 최대 500자. 곡 언어(영어면 영어, 한국어면 한국어)에 맞춰 작성.
 
 음악 Shorts 제목 패턴:
 - "곡제목 🎵 장르 키워드 #Shorts"
@@ -22,7 +23,8 @@ SYSTEM_PROMPT = """당신은 YouTube Shorts 음악 채널 SEO 전문가입니다
 {
   "title": "...",
   "description": "...",
-  "tags": ["...", "..."]
+  "tags": ["...", "..."],
+  "first_comment": "..."
 }"""
 
 

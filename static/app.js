@@ -299,13 +299,32 @@ function renderStepMusic(p) {
 
 function renderMetadataCard(meta) {
   const tags = Array.isArray(meta.tags) ? meta.tags : [];
+  const firstComment = meta.first_comment || '';
   return `
-    <div class="card">
-      <div class="text-sm text-3" style="margin-bottom:4px">TITLE</div>
+    <div class="card" data-copy="${attr(meta.title || '')}">
+      <div class="flex-between">
+        <div class="text-sm text-3" style="margin-bottom:4px">TITLE</div>
+        <button class="copy-btn" onclick="copyText(this)">Copy</button>
+      </div>
       <div style="font-size:16px;font-weight:600;margin-bottom:16px">${esc(meta.title || '')}</div>
-      ${meta.description ? `<div class="text-sm text-2 mb-12" style="white-space:pre-line">${esc(meta.description)}</div>` : ''}
-      ${tags.length ? `<div class="text-sm text-3">${tags.map(t => '#' + esc(t)).join(' ')}</div>` : ''}
+      ${meta.description ? `
+      <div class="text-sm text-3" style="margin-top:12px;margin-bottom:4px">DESCRIPTION</div>
+      <div class="text-sm text-2 mb-12" style="white-space:pre-line">${esc(meta.description)}</div>
+      ` : ''}
+      ${tags.length ? `
+      <div class="text-sm text-3" style="margin-top:12px;margin-bottom:4px">TAGS</div>
+      <div class="text-sm text-3 mb-12">${tags.map(t => '#' + esc(t)).join(' ')}</div>
+      ` : ''}
     </div>
+    ${firstComment ? `
+    <div class="card mt-12" data-copy="${attr(firstComment)}">
+      <div class="flex-between">
+        <div class="text-sm text-3" style="margin-bottom:4px">PINNED FIRST COMMENT</div>
+        <button class="copy-btn" onclick="copyText(this)">Copy</button>
+      </div>
+      <div class="text-sm text-2" style="white-space:pre-line">${esc(firstComment)}</div>
+    </div>
+    ` : ''}
   `;
 }
 
@@ -458,13 +477,10 @@ async function loadAssetsStatus() {
 // --- Step: Compose ---
 
 function renderStepCompose(p) {
-  const meta = p.metadata || {};
+  const meta = p.metadata || { title: p.genre };
   return `
-    <div class="card">
-      <div class="text-sm text-3" style="margin-bottom:4px">TITLE</div>
-      <div style="font-size:16px;font-weight:600;margin-bottom:16px">${esc(meta.title || p.genre)}</div>
-      ${meta.description ? `<div class="text-sm text-2 mb-12">${esc(meta.description)}</div>` : ''}
-      ${meta.tags ? `<div class="text-sm text-3 mb-12">${meta.tags.map(t => '#' + t).join(' ')}</div>` : ''}
+    ${renderMetadataCard(meta)}
+    <div class="card mt-12">
       <video class="video-preview" controls preload="metadata">
         <source src="/api/projects/${p.id}/download" type="video/mp4">
       </video>

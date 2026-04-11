@@ -5,7 +5,8 @@ from services.metadata import MetadataGenerator
 MOCK_METADATA = {
     "title": "Midnight Rain 🌧️ Lo-fi Chill #Shorts",
     "description": "A peaceful lo-fi track for your late-night study session.\n\n#lofi #chill #study #Shorts",
-    "tags": ["lofi", "chill", "study music", "lo-fi hip hop", "Shorts"]
+    "tags": ["lofi", "chill", "study music", "lo-fi hip hop", "Shorts"],
+    "first_comment": "Perfect for late-night study 🌧️\nDrop a like if this helps you focus!\n#lofi #chill #studymusic #Shorts",
 }
 
 
@@ -20,8 +21,10 @@ def test_generate_metadata():
     assert "title" in result
     assert "description" in result
     assert "tags" in result
+    assert "first_comment" in result
     assert "#Shorts" in result["title"]
     assert "Shorts" in result["tags"]
+    assert result["first_comment"]
 
 
 def test_generate_includes_genre_in_prompt():
