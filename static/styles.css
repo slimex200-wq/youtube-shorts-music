@@ -267,14 +267,15 @@ section {
   gap: 0;
   margin-bottom: 32px;
   padding: 20px 0;
-  overflow-x: auto;
+  overflow-x: hidden;
+  flex-wrap: nowrap;
 }
 
 .step {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: 6px;
+  padding: 6px 8px;
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 500;
@@ -282,6 +283,7 @@ section {
   white-space: nowrap;
   transition: all var(--transition);
   cursor: default;
+  flex-shrink: 0;
 }
 
 .step-num {

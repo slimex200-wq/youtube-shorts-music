@@ -158,6 +158,36 @@ async def upload_music(pid: str, file: UploadFile = File(...)):
     return _serialize(project)
 
 
+@app.post("/api/projects/{pid}/metadata")
+async def generate_metadata(pid: str):
+    from services.metadata import MetadataGenerator
+
+    cfg = Config.from_env()
+    if not cfg.anthropic_api_key:
+        raise HTTPException(400, "ANTHROPIC_API_KEY not set")
+
+    project = _load(pid)
+
+    meta_gen = MetadataGenerator(cfg.anthropic_api_key)
+    try:
+        project.metadata = meta_gen.generate(
+            genre=project.genre,
+            title_suggestion=(
+                project.suno_prompt.get("title_suggestion", "")
+                if project.suno_prompt
+                else ""
+            ),
+            lyrics=project.lyrics,
+            instrumental=project.instrumental,
+            substyle=project.suno_prompt.get("substyle") if project.suno_prompt else None,
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Metadata generation failed: {e}")
+
+    project.save()
+    return _serialize(project)
+
+
 @app.post("/api/projects/{pid}/prompts")
 async def generate_prompts(pid: str):
     from services.prompt_generator import PromptGenerator

@@ -125,11 +125,14 @@ async function handleCreate(e) {
 
 const STEPS = [
   { key: 'create', label: 'Create' },
+  { key: 'metadata', label: 'Metadata' },
   { key: 'music', label: 'Music' },
   { key: 'prompts', label: 'Prompts' },
   { key: 'assets', label: 'Assets' },
   { key: 'compose', label: 'Compose' },
 ];
+
+let metadataAcknowledged = false;
 
 async function openProject(id) {
   document.getElementById('view-dashboard').classList.add('hidden');
@@ -140,6 +143,7 @@ async function openProject(id) {
 
   const content = document.getElementById('step-content');
   content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
+  metadataAcknowledged = false;
 
   try {
     currentProject = await api('GET', `/projects/${id}`);
@@ -155,14 +159,18 @@ function getActiveStep(p) {
   if (p.steps_completed.includes('compose')) return 'compose';
   if (p.steps_completed.includes('prompts')) return 'assets';
   if (p.steps_completed.includes('music')) return 'prompts';
-  if (p.steps_completed.includes('create')) return 'music';
+  if (metadataAcknowledged && p.steps_completed.includes('create')) return 'music';
+  if (p.steps_completed.includes('create')) return 'metadata';
   return 'create';
 }
 
-function renderSteps(activeKey, completed) {
+function renderSteps(activeKey, p) {
+  const completed = p.steps_completed;
   const bar = document.getElementById('steps-bar');
   bar.innerHTML = STEPS.map((s, i) => {
-    const done = completed.includes(s.key) || (s.key === 'assets' && completed.includes('compose'));
+    let done = completed.includes(s.key);
+    if (s.key === 'assets' && completed.includes('compose')) done = true;
+    if (s.key === 'metadata' && (p.metadata || completed.includes('music'))) done = true;
     const active = s.key === activeKey;
     const cls = done ? 'completed' : active ? 'active' : '';
     const check = done ? '&#10003;' : (i + 1);
@@ -179,13 +187,15 @@ function renderSteps(activeKey, completed) {
 function renderProject() {
   const p = currentProject;
   const active = getActiveStep(p);
-  renderSteps(active, p.steps_completed);
+  renderSteps(active, p);
 
   const el = document.getElementById('step-content');
 
   if (active === 'create') {
     el.innerHTML = renderStepCreate(p);
     setupDropzone('music-dropzone', (files) => handleMusicUpload(files[0]));
+  } else if (active === 'metadata') {
+    el.innerHTML = renderStepMetadata(p);
   } else if (active === 'music') {
     el.innerHTML = renderStepMusic(p);
     setupDropzone('music-dropzone', (files) => handleMusicUpload(files[0]));
@@ -281,7 +291,54 @@ function renderSunoOptions(sp) {
 }
 
 function renderStepMusic(p) {
-  return renderSunoPrompt(p) + renderMusicUpload();
+  const metaCard = p.metadata ? renderMetadataCard(p.metadata) + '<div class="mt-16"></div>' : '';
+  return metaCard + renderSunoPrompt(p) + renderMusicUpload();
+}
+
+// --- Step: Metadata ---
+
+function renderMetadataCard(meta) {
+  const tags = Array.isArray(meta.tags) ? meta.tags : [];
+  return `
+    <div class="card">
+      <div class="text-sm text-3" style="margin-bottom:4px">TITLE</div>
+      <div style="font-size:16px;font-weight:600;margin-bottom:16px">${esc(meta.title || '')}</div>
+      ${meta.description ? `<div class="text-sm text-2 mb-12" style="white-space:pre-line">${esc(meta.description)}</div>` : ''}
+      ${tags.length ? `<div class="text-sm text-3">${tags.map(t => '#' + esc(t)).join(' ')}</div>` : ''}
+    </div>
+  `;
+}
+
+function renderStepMetadata(p) {
+  if (!p.metadata) {
+    return `
+      <div class="card">
+        <div class="text-sm text-2 mb-12">
+          YouTube 제목/설명/태그 메타데이터를 바로 생성합니다.
+          음악·이미지 업로드 없이 미리 확인할 수 있습니다.
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-primary" id="gen-metadata-btn" onclick="handleGenMetadata()">
+            Generate YouTube Metadata
+          </button>
+          <button class="btn btn-secondary" onclick="handleAdvanceToMusic()">
+            Skip to Music &rarr;
+          </button>
+        </div>
+      </div>
+    `;
+  }
+  return `
+    ${renderMetadataCard(p.metadata)}
+    <div class="mt-16" style="display:flex;gap:8px">
+      <button class="btn btn-secondary" id="regen-metadata-btn" onclick="handleGenMetadata()">
+        Regenerate
+      </button>
+      <button class="btn btn-primary" onclick="handleAdvanceToMusic()">
+        Next: Upload Music &rarr;
+      </button>
+    </div>
+  `;
 }
 
 // --- Step: Prompts ---
@@ -452,6 +509,30 @@ async function handleRegenPrompts() {
     btn.disabled = false;
     btn.textContent = 'Regenerate';
   }
+}
+
+async function handleGenMetadata() {
+  const btn = document.getElementById('gen-metadata-btn') || document.getElementById('regen-metadata-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Generating...';
+  }
+  try {
+    currentProject = await api('POST', `/projects/${currentProject.id}/metadata`);
+    document.getElementById('step-content').innerHTML = renderStepMetadata(currentProject);
+    renderSteps(getActiveStep(currentProject), currentProject);
+  } catch (err) {
+    alert(err.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = btn.id === 'regen-metadata-btn' ? 'Regenerate' : 'Generate YouTube Metadata';
+    }
+  }
+}
+
+function handleAdvanceToMusic() {
+  metadataAcknowledged = true;
+  renderProject();
 }
 
 async function handleGenPrompts() {
