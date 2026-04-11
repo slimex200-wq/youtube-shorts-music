@@ -1,4 +1,5 @@
 """YouTube Shorts Music -- Web API"""
+import logging
 import shutil
 from pathlib import Path
 
@@ -7,8 +8,11 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from config import Config, PROJECTS_DIR
+from config import PROJECTS_DIR
 from models.project import Project
+from services.llm import LLMError
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="YouTube Shorts Music")
 
@@ -59,22 +63,20 @@ async def create_project(req: CreateRequest):
     )
     project.update_status("created", step_name="create")
 
-    cfg = Config.from_env()
-    if cfg.anthropic_api_key:
-        from services.suno_prompt import SunoPromptGenerator
+    from services.suno_prompt import SunoPromptGenerator
 
-        gen = SunoPromptGenerator(cfg.anthropic_api_key, projects_dir=str(PROJECTS_DIR))
-        try:
-            project.suno_prompt = gen.generate(
-                genre=req.genre,
-                bpm=req.bpm,
-                mood=req.mood,
-                lyrics=req.lyrics,
-                instrumental=req.instrumental,
-                substyle=req.substyle,
-            )
-        except Exception:
-            pass
+    gen = SunoPromptGenerator(projects_dir=str(PROJECTS_DIR))
+    try:
+        project.suno_prompt = gen.generate(
+            genre=req.genre,
+            bpm=req.bpm,
+            mood=req.mood,
+            lyrics=req.lyrics,
+            instrumental=req.instrumental,
+            substyle=req.substyle,
+        )
+    except Exception as e:
+        logger.warning("Suno prompt generation failed: %s", e)
 
     project.save()
     return _serialize(project)
@@ -162,13 +164,9 @@ async def upload_music(pid: str, file: UploadFile = File(...)):
 async def generate_metadata(pid: str):
     from services.metadata import MetadataGenerator
 
-    cfg = Config.from_env()
-    if not cfg.anthropic_api_key:
-        raise HTTPException(400, "ANTHROPIC_API_KEY not set")
-
     project = _load(pid)
 
-    meta_gen = MetadataGenerator(cfg.anthropic_api_key)
+    meta_gen = MetadataGenerator()
     try:
         project.metadata = meta_gen.generate(
             genre=project.genre,
@@ -181,6 +179,8 @@ async def generate_metadata(pid: str):
             instrumental=project.instrumental,
             substyle=project.suno_prompt.get("substyle") if project.suno_prompt else None,
         )
+    except LLMError as e:
+        raise HTTPException(503, f"LLM backend unavailable: {e}")
     except Exception as e:
         raise HTTPException(500, f"Metadata generation failed: {e}")
 
@@ -192,15 +192,11 @@ async def generate_metadata(pid: str):
 async def generate_prompts(pid: str):
     from services.prompt_generator import PromptGenerator
 
-    cfg = Config.from_env()
-    if not cfg.anthropic_api_key:
-        raise HTTPException(400, "ANTHROPIC_API_KEY not set")
-
     project = _load(pid)
     if not project.scenes:
         raise HTTPException(400, "No scenes. Upload music first.")
 
-    gen = PromptGenerator(cfg.anthropic_api_key)
+    gen = PromptGenerator()
     try:
         project.scenes = gen.generate(
             genre=project.genre,
@@ -210,6 +206,8 @@ async def generate_prompts(pid: str):
             suno_prompt=project.suno_prompt,
             style=project.style,
         )
+    except LLMError as e:
+        raise HTTPException(503, f"LLM backend unavailable: {e}")
     except Exception as e:
         raise HTTPException(500, f"Prompt generation failed: {e}")
 
@@ -293,11 +291,10 @@ async def compose_video(pid: str, req: ComposeRequest | None = None):
     except Exception as e:
         raise HTTPException(500, f"Compose failed: {e}")
 
-    cfg = Config.from_env()
-    if cfg.anthropic_api_key and not project.metadata:
+    if not project.metadata:
         from services.metadata import MetadataGenerator
 
-        meta_gen = MetadataGenerator(cfg.anthropic_api_key)
+        meta_gen = MetadataGenerator()
         try:
             project.metadata = meta_gen.generate(
                 genre=project.genre,
@@ -310,8 +307,8 @@ async def compose_video(pid: str, req: ComposeRequest | None = None):
                 instrumental=project.instrumental,
                 substyle=project.suno_prompt.get("substyle") if project.suno_prompt else None,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Metadata fallback generation failed: %s", e)
 
     project.update_status("composed", step_name="compose")
     project.save()

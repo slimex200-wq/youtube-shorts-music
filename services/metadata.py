@@ -1,7 +1,7 @@
 import logging
+from typing import Optional
 
-import anthropic
-
+from services.llm import LLMClient, default_client
 from services.utils import parse_claude_json
 
 logger = logging.getLogger(__name__)
@@ -42,16 +42,17 @@ SYSTEM_PROMPT = """당신은 YouTube Shorts 음악 채널 SEO 전문가입니다
 
 
 class MetadataGenerator:
-    def __init__(self, api_key: str):
-        self.client = anthropic.Anthropic(api_key=api_key)
+    def __init__(self, llm: Optional[LLMClient] = None, model: str = "haiku"):
+        self.llm = llm or default_client()
+        self.model = model
 
     def generate(
         self,
         genre: str,
         title_suggestion: str = "",
-        lyrics: str = None,
+        lyrics: Optional[str] = None,
         instrumental: bool = False,
-        substyle: str = None,
+        substyle: Optional[str] = None,
     ) -> dict:
         user_prompt = f"장르: {genre}\n"
         if substyle:
@@ -65,14 +66,13 @@ class MetadataGenerator:
 
         user_prompt += "\nYouTube Shorts 음악 채널용 메타데이터를 생성해주세요."
 
-        message = self.client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1024,
+        response_text = self.llm.complete(
             system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_prompt}],
+            user=user_prompt,
+            model=self.model,
+            max_tokens=2048,
         )
 
-        response_text = message.content[0].text
         metadata = parse_claude_json(response_text)
 
         if "Shorts" not in metadata.get("tags", []):

@@ -6,3 +6,5 @@ __pycache__/
 projects/
 credentials.json
 token_upload.json
+config/llm_usage.jsonl
+.omc/

@@ -1,7 +1,7 @@
 import logging
+from typing import Optional
 
-import anthropic
-
+from services.llm import LLMClient, default_client
 from services.utils import parse_claude_json
 
 logger = logging.getLogger(__name__)
@@ -142,17 +142,18 @@ Respond ONLY with a JSON array:
 
 
 class PromptGenerator:
-    def __init__(self, api_key: str):
-        self.client = anthropic.Anthropic(api_key=api_key)
+    def __init__(self, llm: Optional[LLMClient] = None, model: str = "sonnet"):
+        self.llm = llm or default_client()
+        self.model = model
 
     def generate(
         self,
         genre: str,
         scenes: list[dict],
-        lyrics: str = None,
+        lyrics: Optional[str] = None,
         instrumental: bool = False,
-        suno_prompt: dict = None,
-        style: str = None,
+        suno_prompt: Optional[dict] = None,
+        style: Optional[str] = None,
     ) -> list[dict]:
         user_prompt = f"장르: {genre}\n"
         user_prompt += f"씬 수: {len(scenes)}\n\n"
@@ -175,14 +176,12 @@ class PromptGenerator:
             duration = round(scene["end_sec"] - scene["start_sec"], 1)
             user_prompt += f"- 씬 {scene['id']}: {scene['start_sec']}초~{scene['end_sec']}초 ({duration}초, {scene['beat_count']}비트)\n"
 
-        message = self.client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=4096,
+        response_text = self.llm.complete(
             system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_prompt}],
+            user=user_prompt,
+            model=self.model,
+            max_tokens=4096,
         )
-
-        response_text = message.content[0].text
         prompts = parse_claude_json(response_text)
 
         # 기존 씬 데이터에 프롬프트 머지

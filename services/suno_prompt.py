@@ -1,7 +1,7 @@
 import logging
+from typing import Optional
 
-import anthropic
-
+from services.llm import LLMClient, default_client
 from services.shranz_substyles import (
     build_substyle_prompt_section,
     get_used_substyles_from_projects,
@@ -105,9 +105,15 @@ DEFAULT_SHRANZ_SECTION = """## Shranz / Schranz / Hard Techno
 
 
 class SunoPromptGenerator:
-    def __init__(self, api_key: str, projects_dir: str | None = None):
-        self.client = anthropic.Anthropic(api_key=api_key)
+    def __init__(
+        self,
+        llm: Optional[LLMClient] = None,
+        projects_dir: Optional[str] = None,
+        model: str = "sonnet",
+    ):
+        self.llm = llm or default_client()
         self.projects_dir = projects_dir
+        self.model = model
 
     def _build_system_prompt(
         self,
@@ -162,14 +168,12 @@ class SunoPromptGenerator:
 
         user_prompt += "\nYouTube Shorts용 60초 이내 곡에 맞는 Suno 프롬프트를 생성해주세요."
 
-        message = self.client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1024,
+        response_text = self.llm.complete(
             system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
+            user=user_prompt,
+            model=self.model,
+            max_tokens=2048,
         )
-
-        response_text = message.content[0].text
         result = parse_claude_json(response_text)
 
         if selected_substyle and not result.get("substyle"):
