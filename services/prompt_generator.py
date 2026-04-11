@@ -1,6 +1,7 @@
 import logging
 from typing import Optional
 
+from services.kb import wrap_system_prompt
 from services.llm import LLMClient, default_client
 from services.utils import parse_claude_json
 
@@ -142,9 +143,15 @@ Respond ONLY with a JSON array:
 
 
 class PromptGenerator:
-    def __init__(self, llm: Optional[LLMClient] = None, model: str = "sonnet"):
+    def __init__(
+        self,
+        llm: Optional[LLMClient] = None,
+        model: str = "sonnet",
+        channel: str = "default",
+    ):
         self.llm = llm or default_client()
         self.model = model
+        self.channel = channel
 
     def generate(
         self,
@@ -177,7 +184,7 @@ class PromptGenerator:
             user_prompt += f"- 씬 {scene['id']}: {scene['start_sec']}초~{scene['end_sec']}초 ({duration}초, {scene['beat_count']}비트)\n"
 
         response_text = self.llm.complete(
-            system=SYSTEM_PROMPT,
+            system=wrap_system_prompt(SYSTEM_PROMPT, self.channel),
             user=user_prompt,
             model=self.model,
             max_tokens=4096,

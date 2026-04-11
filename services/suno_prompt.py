@@ -1,6 +1,7 @@
 import logging
 from typing import Optional
 
+from services.kb import wrap_system_prompt
 from services.llm import LLMClient, default_client
 from services.shranz_substyles import (
     build_substyle_prompt_section,
@@ -110,10 +111,12 @@ class SunoPromptGenerator:
         llm: Optional[LLMClient] = None,
         projects_dir: Optional[str] = None,
         model: str = "sonnet",
+        channel: str = "default",
     ):
         self.llm = llm or default_client()
         self.projects_dir = projects_dir
         self.model = model
+        self.channel = channel
 
     def _build_system_prompt(
         self,
@@ -169,7 +172,7 @@ class SunoPromptGenerator:
         user_prompt += "\nYouTube Shorts용 60초 이내 곡에 맞는 Suno 프롬프트를 생성해주세요."
 
         response_text = self.llm.complete(
-            system=system_prompt,
+            system=wrap_system_prompt(system_prompt, self.channel),
             user=user_prompt,
             model=self.model,
             max_tokens=2048,

@@ -1,6 +1,7 @@
 import logging
 from typing import Optional
 
+from services.kb import wrap_system_prompt
 from services.llm import LLMClient, default_client
 from services.utils import parse_claude_json
 
@@ -42,9 +43,15 @@ SYSTEM_PROMPT = """당신은 YouTube Shorts 음악 채널 SEO 전문가입니다
 
 
 class MetadataGenerator:
-    def __init__(self, llm: Optional[LLMClient] = None, model: str = "haiku"):
+    def __init__(
+        self,
+        llm: Optional[LLMClient] = None,
+        model: str = "haiku",
+        channel: str = "default",
+    ):
         self.llm = llm or default_client()
         self.model = model
+        self.channel = channel
 
     def generate(
         self,
@@ -67,7 +74,7 @@ class MetadataGenerator:
         user_prompt += "\nYouTube Shorts 음악 채널용 메타데이터를 생성해주세요."
 
         response_text = self.llm.complete(
-            system=SYSTEM_PROMPT,
+            system=wrap_system_prompt(SYSTEM_PROMPT, self.channel),
             user=user_prompt,
             model=self.model,
             max_tokens=2048,
