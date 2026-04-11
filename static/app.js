@@ -23,42 +23,105 @@ async function api(method, path, body, isFormData = false) {
 
 // --- Dashboard ---
 
+let dashboardProjects = [];
+let dashboardQuery = '';
+
 async function loadDashboard() {
   document.getElementById('view-dashboard').classList.remove('hidden');
   document.getElementById('view-project').classList.add('hidden');
   document.getElementById('nav-left').innerHTML = '<span class="nav-title">YouTube Shorts Music</span>';
-  document.getElementById('nav-right').innerHTML = '';
+  document.getElementById('nav-right').innerHTML = renderLiteToggle();
   currentProject = null;
 
   const list = document.getElementById('project-list');
   list.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
   try {
-    const projects = (await api('GET', '/projects')).reverse();
-    if (!projects.length) {
-      list.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-state-title">No projects yet</div>
-          <div class="text-sm text-3">Create a project to get started</div>
-        </div>`;
-      return;
-    }
-    list.innerHTML = projects.map(p => `
-      <div class="card card-clickable project-item" onclick="openProject('${p.id}')">
-        <div class="project-info">
-          <span class="project-id">${p.id}</span>
-          <span class="project-meta">
-            ${p.genre}
-            ${p.bpm ? `&middot; ${p.bpm} BPM` : ''}
-            ${p.duration_sec ? `&middot; ${p.duration_sec.toFixed(0)}s` : ''}
-          </span>
-        </div>
-        ${statusBadge(p.status)}
-      </div>
-    `).join('');
+    dashboardProjects = (await api('GET', '/projects')).reverse();
+    renderProjectList();
   } catch (e) {
     list.innerHTML = `<div class="empty-state text-sm" style="color:var(--error)">${e.message}</div>`;
   }
+}
+
+function renderLiteToggle() {
+  const on = isLiteMode();
+  return `
+    <label class="lite-toggle" title="Lite mode hides video production steps">
+      <input type="checkbox" ${on ? 'checked' : ''} onchange="handleLiteToggle(this.checked)">
+      <span>Lite</span>
+    </label>
+  `;
+}
+
+function handleLiteToggle(on) {
+  setLiteMode(on);
+  if (currentProject) {
+    renderProject();
+  } else {
+    renderProjectList();
+  }
+}
+
+function renderProjectList() {
+  const list = document.getElementById('project-list');
+  if (!dashboardProjects.length) {
+    list.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-title">No projects yet</div>
+        <div class="text-sm text-3">Create a project to get started</div>
+      </div>`;
+    return;
+  }
+
+  const q = dashboardQuery.trim().toLowerCase();
+  const filtered = q ? dashboardProjects.filter(p => {
+    const hay = [
+      p.id, p.genre,
+      p.title_lock || '',
+      (p.metadata && p.metadata.title) || '',
+      (p.mood_tags || []).join(' '),
+      (p.motif_tags || []).join(' '),
+      (p.suno_prompt && p.suno_prompt.substyle) || '',
+    ].join(' ').toLowerCase();
+    return hay.includes(q);
+  }) : dashboardProjects;
+
+  const searchBar = `
+    <div class="dashboard-search mb-12">
+      <input class="form-input" placeholder="Search by title, genre, mood, motif..." value="${attr(dashboardQuery)}" oninput="handleDashboardSearch(this.value)">
+      <div class="text-sm text-3" style="margin-top:6px">${filtered.length} / ${dashboardProjects.length}</div>
+    </div>
+  `;
+
+  const cards = filtered.map(p => {
+    const title = p.title_lock || (p.metadata && p.metadata.title) || p.id;
+    const refs = (p.visual_refs || []).slice(0, 3).map(fname =>
+      `<img class="ref-thumb-mini" src="/api/projects/${p.id}/refs/${encodeURIComponent(fname)}" alt="">`
+    ).join('');
+    const moods = (p.mood_tags || []).map(m => `<span class="mood-chip-mini">${esc(m)}</span>`).join('');
+    return `
+      <div class="card card-clickable project-item" onclick="openProject('${p.id}')">
+        <div class="project-info">
+          <span class="project-title">${esc(title)}</span>
+          <span class="project-meta">
+            ${esc(p.genre)}
+            ${p.bpm ? `&middot; ${p.bpm} BPM` : ''}
+          </span>
+          ${moods ? `<div class="project-moods mt-12">${moods}</div>` : ''}
+        </div>
+        ${refs ? `<div class="project-refs">${refs}</div>` : ''}
+        ${statusBadge(p.status)}
+      </div>
+    `;
+  }).join('');
+
+  list.innerHTML = searchBar + cards;
+}
+
+function handleDashboardSearch(value) {
+  dashboardQuery = value;
+  renderProjectList();
 }
 
 function statusBadge(status) {
@@ -126,13 +189,32 @@ async function handleCreate(e) {
 const STEPS = [
   { key: 'create', label: 'Create' },
   { key: 'metadata', label: 'Metadata' },
-  { key: 'music', label: 'Music' },
-  { key: 'prompts', label: 'Prompts' },
-  { key: 'assets', label: 'Assets' },
-  { key: 'compose', label: 'Compose' },
+  { key: 'library', label: 'Library' },
+  { key: 'music', label: 'Music', fullOnly: true },
+  { key: 'prompts', label: 'Prompts', fullOnly: true },
+  { key: 'assets', label: 'Assets', fullOnly: true },
+  { key: 'compose', label: 'Compose', fullOnly: true },
 ];
 
 let metadataAcknowledged = false;
+let libraryAcknowledged = false;
+
+// UI Lite mode — hides video-production steps; persisted in localStorage.
+function isLiteMode() {
+  return localStorage.getItem('uiLiteMode') !== 'false';
+}
+
+function setLiteMode(on) {
+  localStorage.setItem('uiLiteMode', on ? 'true' : 'false');
+}
+
+function visibleSteps() {
+  return isLiteMode() ? STEPS.filter(s => !s.fullOnly) : STEPS;
+}
+
+// Tag caches
+let moodsCache = null;
+let motifsCache = null;
 
 async function openProject(id) {
   document.getElementById('view-dashboard').classList.add('hidden');
@@ -144,11 +226,12 @@ async function openProject(id) {
   const content = document.getElementById('step-content');
   content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
   metadataAcknowledged = false;
+  libraryAcknowledged = false;
 
   try {
     currentProject = await api('GET', `/projects/${id}`);
     document.getElementById('nav-right').innerHTML =
-      `<button class="btn btn-danger btn-sm" onclick="deleteProject('${id}')">Delete</button>`;
+      `${renderLiteToggle()}<button class="btn btn-danger btn-sm" onclick="deleteProject('${id}')">Delete</button>`;
     renderProject();
   } catch (err) {
     content.innerHTML = `<div class="empty-state" style="color:var(--error)">${err.message}</div>`;
@@ -156,21 +239,35 @@ async function openProject(id) {
 }
 
 function getActiveStep(p) {
-  if (p.steps_completed.includes('compose')) return 'compose';
-  if (p.steps_completed.includes('prompts')) return 'assets';
-  if (p.steps_completed.includes('music')) return 'prompts';
-  if (metadataAcknowledged && p.steps_completed.includes('create')) return 'music';
+  const lite = isLiteMode();
+  if (!lite && p.steps_completed.includes('compose')) return 'compose';
+  if (!lite && p.steps_completed.includes('prompts')) return 'assets';
+  if (!lite && p.steps_completed.includes('music')) return 'prompts';
+  if (!lite && libraryAcknowledged && p.steps_completed.includes('create')) return 'music';
+  if (metadataAcknowledged && p.steps_completed.includes('create')) return 'library';
   if (p.steps_completed.includes('create')) return 'metadata';
   return 'create';
 }
 
+function libraryHasContent(p) {
+  return (
+    (p.visual_refs && p.visual_refs.length) ||
+    (p.mood_tags && p.mood_tags.length) ||
+    (p.motif_tags && p.motif_tags.length) ||
+    (p.notes && p.notes.trim()) ||
+    (p.title_lock && p.title_lock.trim())
+  );
+}
+
 function renderSteps(activeKey, p) {
   const completed = p.steps_completed;
+  const steps = visibleSteps();
   const bar = document.getElementById('steps-bar');
-  bar.innerHTML = STEPS.map((s, i) => {
+  bar.innerHTML = steps.map((s, i) => {
     let done = completed.includes(s.key);
     if (s.key === 'assets' && completed.includes('compose')) done = true;
     if (s.key === 'metadata' && (p.metadata || completed.includes('music'))) done = true;
+    if (s.key === 'library' && (libraryHasContent(p) || completed.includes('music'))) done = true;
     const active = s.key === activeKey;
     const cls = done ? 'completed' : active ? 'active' : '';
     const check = done ? '&#10003;' : (i + 1);
@@ -179,7 +276,7 @@ function renderSteps(activeKey, p) {
         <span class="step-num">${check}</span>
         <span>${s.label}</span>
       </div>
-      ${i < STEPS.length - 1 ? '<div class="step-line"></div>' : ''}
+      ${i < steps.length - 1 ? '<div class="step-line"></div>' : ''}
     `;
   }).join('');
 }
@@ -196,6 +293,8 @@ function renderProject() {
     setupDropzone('music-dropzone', (files) => handleMusicUpload(files[0]));
   } else if (active === 'metadata') {
     el.innerHTML = renderStepMetadata(p);
+  } else if (active === 'library') {
+    renderStepLibrary(p);
   } else if (active === 'music') {
     el.innerHTML = renderStepMusic(p);
     setupDropzone('music-dropzone', (files) => handleMusicUpload(files[0]));
@@ -328,6 +427,169 @@ function renderMetadataCard(meta) {
   `;
 }
 
+// --- Step: Library ---
+
+async function renderStepLibrary(p) {
+  const el = document.getElementById('step-content');
+  el.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
+
+  if (!moodsCache) {
+    try { moodsCache = await api('GET', '/tags/moods'); }
+    catch { moodsCache = []; }
+  }
+  if (!motifsCache) {
+    try { motifsCache = await api('GET', '/tags/motifs'); }
+    catch { motifsCache = []; }
+  }
+
+  const moodChips = moodsCache.map(m => {
+    const on = (p.mood_tags || []).includes(m.name);
+    return `<button class="mood-chip ${on ? 'on' : ''}" data-mood="${m.name}" onclick="toggleMood('${m.name}')" title="${esc(m.description)}">${esc(m.label)}</button>`;
+  }).join('');
+
+  const motifChips = (p.motif_tags || []).map(t =>
+    `<span class="motif-tag">${esc(t)}<button class="motif-remove" onclick="removeMotif('${esc(t)}')">×</button></span>`
+  ).join('');
+
+  const motifSuggestions = (motifsCache || [])
+    .filter(m => !(p.motif_tags || []).includes(m.name))
+    .slice(0, 12)
+    .map(m => `<button class="motif-suggest" onclick="addMotif('${esc(m.name)}')">${esc(m.name)} <span class="text-3">×${m.count}</span></button>`)
+    .join('');
+
+  const refs = (p.visual_refs || []).map(fname =>
+    `<div class="ref-thumb">
+       <img src="/api/projects/${p.id}/refs/${encodeURIComponent(fname)}" alt="${esc(fname)}">
+       <button class="ref-remove" onclick="deleteRef('${esc(fname)}')">×</button>
+     </div>`
+  ).join('');
+
+  const finalTitle = p.title_lock || (p.metadata && p.metadata.title) || '';
+  const continueBtn = !isLiteMode() ? `
+    <button class="btn btn-primary mt-16" onclick="handleAdvanceToMusic()">
+      Continue to Music →
+    </button>` : '';
+
+  el.innerHTML = `
+    <div class="card">
+      <div class="library-section-label">VISUAL REFERENCES</div>
+      <div id="refs-dropzone" class="dropzone-compact">
+        <span class="dropzone-label">Drop ref images or click</span>
+        <input type="file" accept=".png,.jpg,.jpeg,.webp,.gif" multiple style="display:none">
+      </div>
+      <div class="ref-grid mt-12">${refs || '<div class="text-sm text-3">레퍼런스 이미지 없음</div>'}</div>
+    </div>
+
+    <div class="card mt-16">
+      <div class="library-section-label">MOOD</div>
+      <div class="mood-grid">${moodChips}</div>
+    </div>
+
+    <div class="card mt-16">
+      <div class="library-section-label">MOTIFS</div>
+      <div class="motif-list">${motifChips || '<span class="text-sm text-3">태그 없음</span>'}</div>
+      <input id="motif-input" class="form-input mt-12" placeholder="모티프 태그 입력 후 Enter (예: hood, spacesuit, ruins)">
+      ${motifSuggestions ? `<div class="motif-suggestions mt-12"><div class="text-sm text-3 mb-12">자주 쓴 태그</div>${motifSuggestions}</div>` : ''}
+    </div>
+
+    <div class="card mt-16">
+      <div class="library-section-label">FINAL TITLE LOCK</div>
+      <div class="text-sm text-3 mb-12">YouTube 업로드 확정 제목 (없으면 메타의 title 사용)</div>
+      <input id="title-lock-input" class="form-input" value="${attr(p.title_lock || '')}" placeholder="${attr((p.metadata && p.metadata.title) || '제목 없음')}">
+      <div class="text-sm text-3 mt-12">현재 확정: <strong>${esc(finalTitle)}</strong></div>
+    </div>
+
+    <div class="card mt-16">
+      <div class="library-section-label">NOTES</div>
+      <textarea id="notes-input" class="form-input" rows="5" placeholder="작업 메모, 참고 링크, 다음 버전 아이디어 등">${esc(p.notes || '')}</textarea>
+    </div>
+
+    <div class="mt-16" style="display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="saveLibrary()">Save Library</button>
+      ${continueBtn}
+    </div>
+  `;
+
+  setupDropzone('refs-dropzone', handleRefsUpload);
+
+  const motifInput = document.getElementById('motif-input');
+  if (motifInput) {
+    motifInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && motifInput.value.trim()) {
+        e.preventDefault();
+        addMotif(motifInput.value.trim());
+        motifInput.value = '';
+      }
+    });
+  }
+}
+
+async function toggleMood(name) {
+  const current = new Set(currentProject.mood_tags || []);
+  if (current.has(name)) current.delete(name);
+  else current.add(name);
+  try {
+    currentProject = await api('PATCH', `/projects/${currentProject.id}`, {
+      mood_tags: Array.from(current),
+    });
+    renderStepLibrary(currentProject);
+  } catch (e) { alert(e.message); }
+}
+
+async function addMotif(tag) {
+  const current = [...(currentProject.motif_tags || []), tag];
+  try {
+    currentProject = await api('PATCH', `/projects/${currentProject.id}`, {
+      motif_tags: current,
+    });
+    motifsCache = null;
+    renderStepLibrary(currentProject);
+  } catch (e) { alert(e.message); }
+}
+
+async function removeMotif(tag) {
+  const current = (currentProject.motif_tags || []).filter(t => t !== tag);
+  try {
+    currentProject = await api('PATCH', `/projects/${currentProject.id}`, {
+      motif_tags: current,
+    });
+    renderStepLibrary(currentProject);
+  } catch (e) { alert(e.message); }
+}
+
+async function saveLibrary() {
+  const notes = document.getElementById('notes-input').value;
+  const titleLock = document.getElementById('title-lock-input').value.trim();
+  try {
+    currentProject = await api('PATCH', `/projects/${currentProject.id}`, {
+      notes,
+      title_lock: titleLock,
+    });
+    const btn = event.target;
+    const prev = btn.textContent;
+    btn.textContent = 'Saved';
+    setTimeout(() => { btn.textContent = prev; }, 1200);
+  } catch (e) { alert(e.message); }
+}
+
+async function handleRefsUpload(files) {
+  if (!files.length) return;
+  const fd = new FormData();
+  for (const f of files) fd.append('files', f);
+  try {
+    currentProject = await api('POST', `/projects/${currentProject.id}/refs`, fd, true);
+    renderStepLibrary(currentProject);
+  } catch (e) { alert(e.message); }
+}
+
+async function deleteRef(fname) {
+  if (!confirm(`Delete ref "${fname}"?`)) return;
+  try {
+    currentProject = await api('DELETE', `/projects/${currentProject.id}/refs/${encodeURIComponent(fname)}`);
+    renderStepLibrary(currentProject);
+  } catch (e) { alert(e.message); }
+}
+
 function renderStepMetadata(p) {
   if (!p.metadata) {
     return `
@@ -340,8 +602,8 @@ function renderStepMetadata(p) {
           <button class="btn btn-primary" id="gen-metadata-btn" onclick="handleGenMetadata()">
             Generate YouTube Metadata
           </button>
-          <button class="btn btn-secondary" onclick="handleAdvanceToMusic()">
-            Skip to Music &rarr;
+          <button class="btn btn-secondary" onclick="handleAdvanceToLibrary()">
+            Skip to Library &rarr;
           </button>
         </div>
       </div>
@@ -353,8 +615,8 @@ function renderStepMetadata(p) {
       <button class="btn btn-secondary" id="regen-metadata-btn" onclick="handleGenMetadata()">
         Regenerate
       </button>
-      <button class="btn btn-primary" onclick="handleAdvanceToMusic()">
-        Next: Upload Music &rarr;
+      <button class="btn btn-primary" onclick="handleAdvanceToLibrary()">
+        Next: Library &rarr;
       </button>
     </div>
   `;
@@ -546,8 +808,14 @@ async function handleGenMetadata() {
   }
 }
 
+function handleAdvanceToLibrary() {
+  metadataAcknowledged = true;
+  renderProject();
+}
+
 function handleAdvanceToMusic() {
   metadataAcknowledged = true;
+  libraryAcknowledged = true;
   renderProject();
 }
 

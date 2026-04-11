@@ -36,6 +36,13 @@ class Project:
     beat_times: Optional[list] = None
     scenes: list = field(default_factory=list)
     metadata: Optional[dict] = None
+    # Library fields (M3)
+    mood_tags: list = field(default_factory=list)
+    motif_tags: list = field(default_factory=list)
+    visual_refs: list = field(default_factory=list)
+    notes: str = ""
+    title_lock: Optional[str] = None
+    last_edited_at: Optional[str] = None
     config: dict = field(default_factory=lambda: {
         "upload_privacy": "private",
         "title_card": {
@@ -76,6 +83,7 @@ class Project:
         (project_dir / "assets").mkdir(exist_ok=True)
         (project_dir / "music").mkdir(exist_ok=True)
         (project_dir / "output").mkdir(exist_ok=True)
+        (project_dir / "refs").mkdir(exist_ok=True)
         project.save()
         return project
 
@@ -102,6 +110,7 @@ class Project:
         return projects
 
     def save(self):
+        self.last_edited_at = datetime.now(timezone.utc).isoformat()
         data = asdict(self)
         data.pop("_base_dir", None)
         path = self._base_dir / self.id / "project.json"

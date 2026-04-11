@@ -42,6 +42,13 @@ def _serialize(p: Project) -> dict:
         "duration_sec": p.duration_sec,
         "scenes": p.scenes,
         "metadata": p.metadata,
+        "mood_tags": p.mood_tags,
+        "motif_tags": p.motif_tags,
+        "visual_refs": p.visual_refs,
+        "notes": p.notes,
+        "title_lock": p.title_lock,
+        "created_at": p.created_at,
+        "last_edited_at": p.last_edited_at,
         "last_error": p.last_error,
     }
 
@@ -94,15 +101,81 @@ async def get_project(pid: str):
 
 class UpdateRequest(BaseModel):
     style: str | None = None
+    mood_tags: list[str] | None = None
+    motif_tags: list[str] | None = None
+    notes: str | None = None
+    title_lock: str | None = None
 
 
 @app.patch("/api/projects/{pid}")
 async def update_project(pid: str, req: UpdateRequest):
+    from services.tags import clean_motifs, validate_moods
+
     p = _load(pid)
     if req.style is not None:
         p.style = req.style
+    if req.mood_tags is not None:
+        p.mood_tags = validate_moods(req.mood_tags)
+    if req.motif_tags is not None:
+        p.motif_tags = clean_motifs(req.motif_tags)
+    if req.notes is not None:
+        p.notes = req.notes
+    if req.title_lock is not None:
+        p.title_lock = req.title_lock or None
     p.save()
     return _serialize(p)
+
+
+REF_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+
+
+@app.post("/api/projects/{pid}/refs")
+async def upload_refs(pid: str, files: list[UploadFile] = File(...)):
+    project = _load(pid)
+    refs_dir = project.project_dir / "refs"
+    refs_dir.mkdir(exist_ok=True)
+
+    saved = []
+    for f in files:
+        suffix = Path(f.filename).suffix.lower()
+        if suffix not in REF_EXTS:
+            continue
+        dst = refs_dir / f.filename
+        # Avoid name collision
+        n = 1
+        while dst.exists():
+            dst = refs_dir / f"{Path(f.filename).stem}_{n}{suffix}"
+            n += 1
+        with open(dst, "wb") as out:
+            shutil.copyfileobj(f.file, out)
+        saved.append(dst.name)
+
+    project.visual_refs = list(project.visual_refs or [])
+    project.visual_refs.extend(saved)
+    project.save()
+    return _serialize(project)
+
+
+@app.get("/api/projects/{pid}/refs/{filename}")
+async def get_ref(pid: str, filename: str):
+    project = _load(pid)
+    path = project.project_dir / "refs" / filename
+    if not path.exists() or ".." in filename:
+        raise HTTPException(404, "Ref not found")
+    return FileResponse(path)
+
+
+@app.delete("/api/projects/{pid}/refs/{filename}")
+async def delete_ref(pid: str, filename: str):
+    project = _load(pid)
+    if ".." in filename:
+        raise HTTPException(400, "Invalid filename")
+    path = project.project_dir / "refs" / filename
+    if path.exists():
+        path.unlink()
+    project.visual_refs = [r for r in (project.visual_refs or []) if r != filename]
+    project.save()
+    return _serialize(project)
 
 
 @app.delete("/api/projects/{pid}")
@@ -322,6 +395,30 @@ async def download_video(pid: str):
     if not finals:
         raise HTTPException(404, "No output video")
     return FileResponse(finals[0], media_type="video/mp4", filename=finals[0].name)
+
+
+# --- Tags API ---
+
+
+@app.get("/api/tags/moods")
+async def list_moods():
+    from services.tags import MOOD_TAGS
+
+    return [
+        {"name": m.name, "label": m.label, "description": m.description}
+        for m in MOOD_TAGS
+    ]
+
+
+@app.get("/api/tags/motifs")
+async def list_motifs():
+    from services.tags import collect_motif_counts
+
+    counts = collect_motif_counts()
+    return [
+        {"name": k, "count": v}
+        for k, v in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    ]
 
 
 # --- Substyles API ---
