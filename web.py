@@ -26,6 +26,7 @@ class CreateRequest(BaseModel):
     mood: str | None = None
     substyle: str | None = None
     aspect_ratio: str = "9:16"
+    model: str = "sonnet"
 
 
 def _serialize(p: Project) -> dict:
@@ -79,7 +80,7 @@ async def create_project(req: CreateRequest):
 
     from services.suno_prompt import SunoPromptGenerator
 
-    gen = SunoPromptGenerator(projects_dir=str(PROJECTS_DIR))
+    gen = SunoPromptGenerator(projects_dir=str(PROJECTS_DIR), model=req.model)
     try:
         project.suno_prompt = gen.generate(
             genre=req.genre,
@@ -95,7 +96,7 @@ async def create_project(req: CreateRequest):
     # Video prompts (alongside Suno)
     from services.higgsfield_prompt import VideoPromptGenerator
 
-    vgen = VideoPromptGenerator()
+    vgen = VideoPromptGenerator(model=req.model)
     try:
         project.video_prompts = vgen.generate(
             genre=req.genre,
@@ -482,6 +483,120 @@ async def list_substyles():
         for s in SUBSTYLES
     ]
 
+
+
+# --- Usage API (M5) ---
+
+
+@app.get("/api/usage")
+async def get_usage():
+    """LLM 사용량/비용 집계"""
+    import json as _json
+    from services.llm import USAGE_LOG_PATH
+
+    records = []
+    if USAGE_LOG_PATH.exists():
+        for line in USAGE_LOG_PATH.read_text(encoding="utf-8").strip().split("\n"):
+            if line.strip():
+                records.append(_json.loads(line))
+
+    total_cost = sum(r.get("cost_usd", 0) for r in records)
+    total_calls = len(records)
+    total_input = sum(r.get("input_tokens", 0) for r in records)
+    total_output = sum(r.get("output_tokens", 0) for r in records)
+
+    by_model: dict[str, dict] = {}
+    for r in records:
+        m = r.get("model", "unknown")
+        if m not in by_model:
+            by_model[m] = {"calls": 0, "cost_usd": 0, "input_tokens": 0, "output_tokens": 0}
+        by_model[m]["calls"] += 1
+        by_model[m]["cost_usd"] += r.get("cost_usd", 0)
+        by_model[m]["input_tokens"] += r.get("input_tokens", 0)
+        by_model[m]["output_tokens"] += r.get("output_tokens", 0)
+
+    recent = records[-10:][::-1]
+
+    return {
+        "total_cost": round(total_cost, 4),
+        "total_calls": total_calls,
+        "total_input_tokens": total_input,
+        "total_output_tokens": total_output,
+        "by_model": by_model,
+        "recent": recent,
+    }
+
+
+# --- Analytics API (M6) ---
+
+
+@app.get("/api/analytics")
+async def get_analytics():
+    """YouTube 성과 분석 — 장르/substyle별 집계"""
+    projects = Project.list_all()
+
+    by_genre: dict[str, dict] = {}
+    by_substyle: dict[str, dict] = {}
+    top_performers: list[dict] = []
+
+    for p in projects:
+        stats = p.youtube_stats or {}
+        views = stats.get("views", 0)
+        likes = stats.get("likes", 0)
+        comments = stats.get("comments", 0)
+
+        genre = p.genre or "unknown"
+        if genre not in by_genre:
+            by_genre[genre] = {"count": 0, "views": 0, "likes": 0, "comments": 0}
+        by_genre[genre]["count"] += 1
+        by_genre[genre]["views"] += views
+        by_genre[genre]["likes"] += likes
+        by_genre[genre]["comments"] += comments
+
+        substyle = (p.suno_prompt or {}).get("substyle")
+        if substyle:
+            if substyle not in by_substyle:
+                by_substyle[substyle] = {"count": 0, "views": 0, "likes": 0, "comments": 0}
+            by_substyle[substyle]["count"] += 1
+            by_substyle[substyle]["views"] += views
+            by_substyle[substyle]["likes"] += likes
+            by_substyle[substyle]["comments"] += comments
+
+        if views > 0:
+            top_performers.append({
+                "id": p.id,
+                "title": p.title_lock or (p.metadata or {}).get("title", p.id),
+                "genre": genre,
+                "substyle": substyle,
+                "views": views,
+                "likes": likes,
+                "comments": comments,
+                "engagement": round((likes + comments) / views * 100, 2) if views else 0,
+                "aspect_ratio": p.aspect_ratio,
+            })
+
+    top_performers.sort(key=lambda x: x["views"], reverse=True)
+
+    # Genre performance ranking
+    genre_ranking = sorted(
+        [{"genre": g, **d, "avg_views": round(d["views"] / d["count"]) if d["count"] else 0}
+         for g, d in by_genre.items()],
+        key=lambda x: x["avg_views"],
+        reverse=True,
+    )
+
+    substyle_ranking = sorted(
+        [{"substyle": s, **d, "avg_views": round(d["views"] / d["count"]) if d["count"] else 0}
+         for s, d in by_substyle.items()],
+        key=lambda x: x["avg_views"],
+        reverse=True,
+    )
+
+    return {
+        "top_performers": top_performers[:20],
+        "genre_ranking": genre_ranking,
+        "substyle_ranking": substyle_ranking,
+    }
 
 
 # --- Editor API ---

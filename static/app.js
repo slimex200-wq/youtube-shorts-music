@@ -775,10 +775,12 @@ async function handleCreate(e) {
   const fd = new FormData(form);
   const substyle = fd.get('substyle') || null;
   const aspect_ratio = fd.get('aspect_ratio') || '9:16';
+  const model = fd.get('model') || 'sonnet';
   const body = {
     genre: fd.get('genre'),
     substyle,
     aspect_ratio,
+    model,
   };
 
   try {
@@ -1599,10 +1601,13 @@ function switchTab(tab) {
 
   document.getElementById('view-dashboard').classList.add('hidden');
   document.getElementById('view-project').classList.add('hidden');
+  document.getElementById('view-analytics')?.classList.add('hidden');
   document.getElementById('view-editor')?.classList.add('hidden');
 
   if (tab === 'shorts') {
     loadDashboard();
+  } else if (tab === 'analytics') {
+    showAnalytics();
   } else if (tab === 'editor') {
     showEditor();
   }
@@ -1716,9 +1721,145 @@ async function loadEditorHistory() {
 }
 
 function selectRatio(el, value) {
-  el.closest('.form-row').querySelectorAll('.ratio-chip').forEach(c => c.classList.remove('on'));
+  el.closest('.form-row,.form-group').querySelectorAll('.ratio-chip').forEach(c => c.classList.remove('on'));
   el.classList.add('on');
   el.querySelector('input').checked = true;
+}
+
+function selectModel(el, value) {
+  el.closest('.form-group').querySelectorAll('.ratio-chip').forEach(c => c.classList.remove('on'));
+  el.classList.add('on');
+  el.querySelector('input').checked = true;
+}
+
+// --- Analytics (M5 + M6) ---
+
+async function showAnalytics() {
+  document.getElementById('view-analytics').classList.remove('hidden');
+  document.getElementById('nav-right').innerHTML = '';
+  const el = document.getElementById('analytics-content');
+  el.innerHTML = '<div class="text-sm text-3" style="padding:40px;text-align:center">Loading...</div>';
+
+  try {
+    const [usage, analytics] = await Promise.all([
+      api('GET', '/usage'),
+      api('GET', '/analytics'),
+    ]);
+    el.innerHTML = renderUsageSection(usage) + renderAnalyticsSection(analytics);
+  } catch (e) {
+    el.innerHTML = `<div style="padding:40px;color:var(--error)">${esc(e.message)}</div>`;
+  }
+}
+
+function renderUsageSection(u) {
+  const modelRows = Object.entries(u.by_model).map(([m, d]) => `
+    <tr>
+      <td style="font-weight:600">${esc(m)}</td>
+      <td>${d.calls}</td>
+      <td>$${d.cost_usd.toFixed(4)}</td>
+      <td>${d.input_tokens.toLocaleString()}</td>
+      <td>${d.output_tokens.toLocaleString()}</td>
+    </tr>
+  `).join('');
+
+  const recentRows = u.recent.map(r => `
+    <tr>
+      <td class="text-3">${r.at ? r.at.slice(5, 16).replace('T', ' ') : ''}</td>
+      <td>${esc(r.model || '')}</td>
+      <td>$${(r.cost_usd || 0).toFixed(4)}</td>
+      <td>${((r.duration_ms || 0) / 1000).toFixed(1)}s</td>
+    </tr>
+  `).join('');
+
+  return `
+    <section>
+      <div class="section-header"><span class="section-title">LLM Usage</span></div>
+      <div class="stats-strip" style="margin-bottom:16px">
+        <div class="stat-item"><span class="stat-val">$${u.total_cost.toFixed(2)}</span><span class="stat-lbl">Total Cost</span></div>
+        <div class="stat-item"><span class="stat-val">${u.total_calls}</span><span class="stat-lbl">API Calls</span></div>
+        <div class="stat-item"><span class="stat-val">${u.total_input_tokens.toLocaleString()}</span><span class="stat-lbl">Input Tokens</span></div>
+        <div class="stat-item"><span class="stat-val">${u.total_output_tokens.toLocaleString()}</span><span class="stat-lbl">Output Tokens</span></div>
+      </div>
+      <div class="analytics-grid">
+        <div class="card">
+          <div class="prompt-card-title" style="margin-bottom:8px">Model Breakdown</div>
+          <table class="analytics-table">
+            <thead><tr><th>Model</th><th>Calls</th><th>Cost</th><th>In</th><th>Out</th></tr></thead>
+            <tbody>${modelRows}</tbody>
+          </table>
+        </div>
+        <div class="card">
+          <div class="prompt-card-title" style="margin-bottom:8px">Recent Calls</div>
+          <table class="analytics-table">
+            <thead><tr><th>Time</th><th>Model</th><th>Cost</th><th>Duration</th></tr></thead>
+            <tbody>${recentRows}</tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderAnalyticsSection(a) {
+  const genreRows = a.genre_ranking.map(g => `
+    <tr>
+      <td style="font-weight:600">${esc(g.genre)}</td>
+      <td>${g.count}</td>
+      <td>${g.views.toLocaleString()}</td>
+      <td>${g.avg_views.toLocaleString()}</td>
+      <td>${g.likes.toLocaleString()}</td>
+    </tr>
+  `).join('');
+
+  const substyleRows = a.substyle_ranking.map(s => `
+    <tr>
+      <td style="font-weight:600">${esc(s.substyle)}</td>
+      <td>${s.count}</td>
+      <td>${s.views.toLocaleString()}</td>
+      <td>${s.avg_views.toLocaleString()}</td>
+    </tr>
+  `).join('');
+
+  const topRows = a.top_performers.slice(0, 10).map((t, i) => `
+    <tr style="cursor:pointer" onclick="openProject('${t.id}')">
+      <td class="text-3">${i + 1}</td>
+      <td style="font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.title)}</td>
+      <td>${esc(t.genre)}</td>
+      <td>${t.views.toLocaleString()}</td>
+      <td>${t.engagement}%</td>
+    </tr>
+  `).join('');
+
+  return `
+    <section style="margin-top:24px">
+      <div class="section-header"><span class="section-title">YouTube Analytics</span></div>
+      <div class="analytics-grid">
+        <div class="card">
+          <div class="prompt-card-title" style="margin-bottom:8px">Genre Performance</div>
+          <table class="analytics-table">
+            <thead><tr><th>Genre</th><th>Count</th><th>Views</th><th>Avg</th><th>Likes</th></tr></thead>
+            <tbody>${genreRows || '<tr><td colspan="5" class="text-3">No data</td></tr>'}</tbody>
+          </table>
+        </div>
+        ${substyleRows ? `
+        <div class="card">
+          <div class="prompt-card-title" style="margin-bottom:8px">Substyle Performance</div>
+          <table class="analytics-table">
+            <thead><tr><th>Substyle</th><th>Count</th><th>Views</th><th>Avg</th></tr></thead>
+            <tbody>${substyleRows}</tbody>
+          </table>
+        </div>
+        ` : ''}
+      </div>
+      <div class="card" style="margin-top:16px">
+        <div class="prompt-card-title" style="margin-bottom:8px">Top Performers</div>
+        <table class="analytics-table">
+          <thead><tr><th>#</th><th>Title</th><th>Genre</th><th>Views</th><th>Engagement</th></tr></thead>
+          <tbody>${topRows || '<tr><td colspan="5" class="text-3">No data</td></tr>'}</tbody>
+        </table>
+      </div>
+    </section>
+  `;
 }
 
 // --- Substyle ---

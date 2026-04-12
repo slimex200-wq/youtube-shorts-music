@@ -19,6 +19,7 @@
   <div class="nav-divider"></div>
   <div class="nav-tabs" id="nav-tabs">
     <button class="ntab on" onclick="switchTab('shorts')">라이브러리</button>
+    <button class="ntab" onclick="switchTab('analytics')">분석</button>
     <button class="ntab" onclick="switchTab('editor')">에디터</button>
   </div>
   <div class="nav-right" id="nav-right"></div>
@@ -49,6 +50,13 @@
   </div>
 </div>
 
+
+<!-- Analytics View -->
+<div id="view-analytics" class="hidden">
+  <div class="main">
+    <div id="analytics-content"></div>
+  </div>
+</div>
 
 <!-- Editor View -->
 <div id="view-editor" class="hidden">
@@ -116,6 +124,13 @@
       <div class="form-row">
         <label class="form-label">장르</label>
         <input class="form-input" name="genre" placeholder="lo-fi hip hop, dark trap, schranz..." required>
+      </div>
+      <div class="form-group mt-12">
+        <label class="form-label">모델</label>
+        <div style="display:flex;gap:6px">
+          <label class="ratio-chip" onclick="selectModel(this,'haiku')"><input type="radio" name="model" value="haiku" hidden>Haiku (Fast)</label>
+          <label class="ratio-chip on" onclick="selectModel(this,'sonnet')"><input type="radio" name="model" value="sonnet" checked hidden>Sonnet</label>
+        </div>
       </div>
       <div class="form-group mt-12 hidden" id="substyle-group">
         <label class="form-label">Shranz Substyle</label>
