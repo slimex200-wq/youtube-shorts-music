@@ -243,14 +243,15 @@ async def generate_metadata(pid: str):
     project = _load(pid)
 
     meta_gen = MetadataGenerator()
+    title_hint = (
+        project.title_lock
+        or (project.suno_prompt.get("title_suggestion", "") if project.suno_prompt else "")
+        or (project.metadata.get("title", "") if project.metadata else "")
+    )
     try:
         project.metadata = meta_gen.generate(
             genre=project.genre,
-            title_suggestion=(
-                project.suno_prompt.get("title_suggestion", "")
-                if project.suno_prompt
-                else ""
-            ),
+            title_suggestion=title_hint,
             lyrics=project.lyrics,
             instrumental=project.instrumental,
             substyle=project.suno_prompt.get("substyle") if project.suno_prompt else None,
@@ -371,14 +372,14 @@ async def compose_video(pid: str, req: ComposeRequest | None = None):
         from services.metadata import MetadataGenerator
 
         meta_gen = MetadataGenerator()
+        title_hint = (
+            project.title_lock
+            or (project.suno_prompt.get("title_suggestion", "") if project.suno_prompt else "")
+        )
         try:
             project.metadata = meta_gen.generate(
                 genre=project.genre,
-                title_suggestion=(
-                    project.suno_prompt.get("title_suggestion", "")
-                    if project.suno_prompt
-                    else ""
-                ),
+                title_suggestion=title_hint,
                 lyrics=project.lyrics,
                 instrumental=project.instrumental,
                 substyle=project.suno_prompt.get("substyle") if project.suno_prompt else None,

@@ -35,29 +35,27 @@ let expandedCards = new Set(); // track which cards are expanded
 async function loadDashboard() {
   document.getElementById('view-dashboard').classList.remove('hidden');
   document.getElementById('view-project').classList.add('hidden');
-  document.getElementById('nav-left').innerHTML = '<span class="nav-title">YouTube Shorts Music</span>';
-  document.getElementById('nav-right').innerHTML = renderLiteToggle();
+  document.getElementById('view-editor')?.classList.add('hidden');
+  // Update nav-right for dashboard
+  document.getElementById('nav-right').innerHTML = `
+    <label class="lite-toggle"><input type="checkbox" ${isLiteMode() ? 'checked' : ''} onchange="handleLiteToggle(this.checked)"><span>Lite</span></label>
+    <button class="btn btn-s" id="sync-yt-btn" onclick="handleYouTubeSync()">YouTube 동기화</button>
+    <button class="btn btn-p" onclick="showCreateModal()">+ 새 프로젝트</button>
+  `;
   currentProject = null;
-
   const list = document.getElementById('project-list');
   list.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
-
   try {
     dashboardProjects = (await api('GET', '/projects')).reverse();
     renderProjectList();
   } catch (e) {
-    list.innerHTML = `<div class="empty-state text-sm" style="color:var(--error)">${e.message}</div>`;
+    list.innerHTML = `<div style="text-align:center;padding:40px;color:var(--error)">${e.message}</div>`;
   }
 }
 
 function renderLiteToggle() {
   const on = isLiteMode();
-  return `
-    <label class="lite-toggle" title="Lite mode hides video production steps">
-      <input type="checkbox" ${on ? 'checked' : ''} onchange="handleLiteToggle(this.checked)">
-      <span>Lite</span>
-    </label>
-  `;
+  return `<label class="lite-toggle"><input type="checkbox" ${on ? 'checked' : ''} onchange="handleLiteToggle(this.checked)"><span>Lite</span></label>`;
 }
 
 function handleLiteToggle(on) {
@@ -103,38 +101,33 @@ function filterProjects() {
 
 async function renderProjectList() {
   const list = document.getElementById('project-list');
-
-  // Preload mood enum for filter chips
   if (!moodsCache) {
     try { moodsCache = await api('GET', '/tags/moods'); }
     catch { moodsCache = []; }
   }
-
   if (!dashboardProjects.length) {
-    list.innerHTML = renderFilterBar(0, 0) + `
-      <div class="empty-state">
-        <div class="empty-state-title">No projects yet</div>
-        <div class="text-sm text-3">Create a project to get started</div>
+    list.innerHTML = renderStatsBar() + renderFilterBar(0, 0) + `
+      <div style="text-align:center;padding:60px 20px;color:var(--t3)">
+        <div style="font-size:14px;color:var(--t2);margin-bottom:8px">프로젝트 없음</div>
+        <div style="font-size:12px">새 프로젝트를 생성하여 시작하세요</div>
       </div>`;
     return;
   }
-
   const filtered = filterProjects();
   const cards = filtered.map(p => renderCard(p)).join('') || `
-    <div class="workspace-empty">No projects match the current filters.</div>
+    <div style="padding:40px 20px;text-align:center;color:var(--t3)">필터와 일치하는 프로젝트가 없습니다.</div>
   `;
-
-  list.innerHTML = renderStatsBar() + renderFilterBar(filtered.length, dashboardProjects.length) + cards;
+  list.innerHTML = renderStatsBar() + renderFilterBar(filtered.length, dashboardProjects.length) + `<div class="card-list">${cards}</div>`;
 }
 
 function renderFilterBar(matchCount, totalCount) {
   const moodChips = (moodsCache || []).map(m => {
     const on = dashboardFilters.moods.has(m.name);
-    return `<button class="mood-chip ${on ? 'on' : ''}" onclick="toggleFilterMood('${m.name}')" title="${esc(m.description)}">${esc(m.label)}</button>`;
+    return `<button class="mchip ${on ? 'on' : ''}" data-m="${m.name}" onclick="toggleFilterMood('${m.name}')" title="${esc(m.description)}">${esc(m.label)}</button>`;
   }).join('');
 
   const substyles = collectSubstyles();
-  const substyleOptions = ['<option value="">All substyles</option>']
+  const substyleOptions = ['<option>전체 장르</option>']
     .concat(substyles.map(s =>
       `<option value="${attr(s)}" ${dashboardFilters.substyle === s ? 'selected' : ''}>${esc(s)}</option>`
     )).join('');
@@ -142,16 +135,38 @@ function renderFilterBar(matchCount, totalCount) {
   const hasFilter = dashboardFilters.query || dashboardFilters.moods.size || dashboardFilters.substyle;
 
   return `
-    <div class="filter-bar">
-      <input class="form-input filter-search" placeholder="Search title, genre, mood, motif, prompt text..."
-             value="${attr(dashboardFilters.query)}"
-             oninput="handleDashboardSearch(this.value)">
-      <select class="form-input filter-substyle" onchange="handleFilterSubstyle(this.value)">${substyleOptions}</select>
-      <div class="filter-moods">${moodChips}</div>
-      ${hasFilter ? `<button class="filter-clear-inline" onclick="clearFilters()">Clear</button>` : ''}
-      <div class="filter-count">${matchCount} / ${totalCount}</div>
+    <div class="filter-wrap">
+      <div class="filter-row">
+        <div class="filter-search-wrap">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="M10 10L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <input class="filter-search" type="text" placeholder="트랙, 장르, 무드 검색..."
+                 value="${attr(dashboardFilters.query)}"
+                 oninput="handleDashboardSearch(this.value)">
+        </div>
+        <button class="filter-expand-btn" onclick="toggleFilterExpand()">
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><rect y="1.5" width="12" height="1.5" rx=".75" fill="currentColor"/><rect y="5.5" width="9" height="1.5" rx=".75" fill="currentColor"/><rect y="9.5" width="6" height="1.5" rx=".75" fill="currentColor"/></svg>
+          필터
+          <svg class="filter-chevron" width="8" height="8" viewBox="0 0 10 10" fill="none" style="transition:transform 140ms ease"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
+        ${hasFilter ? `<button class="btn btn-s" style="font-size:10px" onclick="clearFilters()">초기화</button>` : ''}
+        <span class="filter-count">${matchCount} / ${totalCount}</span>
+      </div>
+      <div class="filter-expanded" id="filter-expanded">
+        <span class="filter-section-lbl">무드</span>
+        <div class="mood-chips">${moodChips}</div>
+        <div class="nav-divider" style="height:16px;margin:0 8px"></div>
+        <span class="filter-section-lbl">서브스타일</span>
+        <select class="genre-select" onchange="handleFilterSubstyle(this.value)">${substyleOptions}</select>
+      </div>
     </div>
   `;
+}
+
+function toggleFilterExpand() {
+  const el = document.getElementById('filter-expanded');
+  const chevrons = document.querySelectorAll('.filter-chevron');
+  el.classList.toggle('open');
+  chevrons.forEach(ch => { ch.style.transform = el.classList.contains('open') ? 'rotate(180deg)' : ''; });
 }
 
 function collectSubstyles() {
@@ -189,22 +204,22 @@ function clearFilters() {
 function renderStatsBar() {
   const total = dashboardProjects.length;
   if (!total) return '';
-
   let totalViews = 0;
+  let synced = 0;
   const genreCounts = {};
   for (const p of dashboardProjects) {
-    const s = (p.youtube_stats || {}).views || 0;
-    totalViews += s;
+    totalViews += (p.youtube_stats || {}).views || 0;
+    if (p.youtube_video_id) synced++;
     const g = p.genre || 'unknown';
     genreCounts[g] = (genreCounts[g] || 0) + 1;
   }
-  const topGenre = Object.entries(genreCounts).sort((a, b) => b[1] - a[1])[0];
-
+  const topGenre = Object.entries(genreCounts).sort((a,b) => b[1]-a[1])[0];
   return `
-    <div class="stats-bar">
-      <span class="stats-item"><strong>${total}</strong> Projects</span>
-      ${totalViews ? `<span class="stats-item"><strong>${totalViews.toLocaleString()}</strong> views</span>` : ''}
-      ${topGenre ? `<span class="stats-item">Top: <strong>${esc(topGenre[0])}</strong> (${topGenre[1]})</span>` : ''}
+    <div class="stats-strip">
+      <div class="stat-item"><span class="stat-val">${total}</span><span class="stat-lbl">프로젝트</span></div>
+      ${totalViews ? `<div class="stat-item"><span class="stat-val">${totalViews.toLocaleString()}</span><span class="stat-lbl">총 조회수</span></div>` : ''}
+      ${synced ? `<div class="stat-item"><span class="stat-val">${synced}</span><span class="stat-lbl">동기화</span></div>` : ''}
+      ${topGenre ? `<div class="stat-item"><span class="stat-lbl">인기 장르</span><span class="stat-badge">${esc(topGenre[0])}</span></div>` : ''}
     </div>
   `;
 }
@@ -226,38 +241,39 @@ function renderCollapsedCard(p) {
   const sp = p.suno_prompt || {};
   const meta = p.metadata || {};
   const stats = p.youtube_stats || {};
-  const substyleBadge = sp.substyle ? `<span class="card-badge">${esc(sp.substyle)}</span>` : '';
+  const isGold = (stats.views || 0) >= 1000;
 
   const thumbSrc = p.thumbnail_url
     || ((p.visual_refs && p.visual_refs.length)
         ? `/api/projects/${p.id}/refs/${encodeURIComponent(p.visual_refs[0])}`
         : '');
   const thumbHtml = thumbSrc
-    ? `<img class="ccard-thumb" src="${thumbSrc}" alt="" loading="lazy">`
-    : `<div class="ccard-thumb-ph">${esc(p.genre).slice(0, 6)}</div>`;
+    ? `<img class="ccard-thumb" src="${thumbSrc}" alt="" loading="lazy" style="width:56px;height:32px;object-fit:cover;border-radius:3px;flex-shrink:0">`
+    : `<div class="thumb-ph has-color"><span style="font-size:7px;color:var(--t4)">${esc(p.genre).slice(0,6).toUpperCase()}</span></div>`;
 
-  const moodDots = (p.mood_tags || []).map(m =>
-    `<span class="ccard-mood-dot" title="${esc(m)}"></span>`
-  ).join('');
+  const preview = (meta.first_comment || sp.style || sp.prompt || '').split('\n')[0];
 
-  const viewsText = stats.views ? `${Number(stats.views).toLocaleString()} views` : '';
+  const moodDots = (p.mood_tags || []).map(m => {
+    const colorMap = {crimson:'var(--crimson)',void:'var(--void)',frost:'var(--frost)',steel:'var(--steel)',ember:'var(--ember)',shadow:'var(--shadow)'};
+    return `<span class="mdot" style="background:${colorMap[m] || 'var(--acc)'}" title="${esc(m)}"></span>`;
+  }).join('');
+
+  const viewsText = stats.views ? `${Number(stats.views).toLocaleString()}` : '';
 
   return `
-    <div class="ccard" data-card="${p.id}" onclick="toggleCardExpand('${p.id}')">
+    <div class="ccard ${isGold ? 'gold' : ''}" data-card="${p.id}" onclick="toggleCardExpand('${p.id}')">
       ${thumbHtml}
-      <div class="ccard-info">
-        <span class="ccard-title">${esc(title)}</span>
-        <span class="ccard-meta">
-          <code>${esc(p.genre)}</code> ${substyleBadge} ${moodDots}
-        </span>
+      <span class="ccard-title">${esc(title)}</span>
+      <span class="ccard-preview">${esc(preview)}</span>
+      <span class="genre-badge">${esc(p.genre)}</span>
+      ${moodDots ? `<div class="mood-dots">${moodDots}</div>` : ''}
+      ${viewsText ? `<span class="views ${isGold ? 'hot' : ''}">${viewsText}</span>` : ''}
+      <div class="qcopy">
+        ${sp.style ? `<button class="cb" onclick="event.stopPropagation();navigator.clipboard.writeText(${JSON.stringify(sp.style)})">Style</button>` : ''}
+        ${meta.title ? `<button class="cb" onclick="event.stopPropagation();navigator.clipboard.writeText(${JSON.stringify(meta.title)})">Title</button>` : ''}
+        ${meta.first_comment ? `<button class="cb" onclick="event.stopPropagation();navigator.clipboard.writeText(${JSON.stringify(meta.first_comment)})">1st</button>` : ''}
       </div>
-      ${viewsText ? `<span class="ccard-views">${viewsText}</span>` : ''}
-      <div class="ccard-quick-copy">
-        ${sp.style ? `<button class="copy-btn" onclick="event.stopPropagation();navigator.clipboard.writeText(${JSON.stringify(sp.style)})">Style</button>` : ''}
-        ${meta.title ? `<button class="copy-btn" onclick="event.stopPropagation();navigator.clipboard.writeText(${JSON.stringify(meta.title)})">Title</button>` : ''}
-        ${meta.first_comment ? `<button class="copy-btn" onclick="event.stopPropagation();navigator.clipboard.writeText(${JSON.stringify(meta.first_comment)})">1st</button>` : ''}
-      </div>
-      <span class="ccard-expand">&#9662;</span>
+      <span class="expand-arrow">&#9662;</span>
     </div>
   `;
 }
@@ -266,108 +282,104 @@ function renderExpandedCard(p) {
   const title = p.title_lock || (p.metadata && p.metadata.title) || p.id;
   const sp = p.suno_prompt || {};
   const meta = p.metadata || {};
-  const substyleBadge = sp.substyle ? `<span class="card-badge">${esc(sp.substyle)}</span>` : '';
-  const lite = isLiteMode();
   const stats = p.youtube_stats || {};
-  const statsLine = stats.views ? `<span>${Number(stats.views).toLocaleString()} views</span>` : '';
+  const isGold = (stats.views || 0) >= 1000;
+  const lite = isLiteMode();
 
-  // Left: thumbnail / first ref
+  const copyIcon = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5" stroke="currentColor" stroke-width="1.5"/></svg>';
+
   const thumbSrc = p.thumbnail_url
     || ((p.visual_refs && p.visual_refs.length)
         ? `/api/projects/${p.id}/refs/${encodeURIComponent(p.visual_refs[0])}`
         : '');
   const thumbHtml = thumbSrc
-    ? `<img class="hcard-thumb-img" src="${thumbSrc}" alt="" loading="lazy">`
-    : `<div class="hcard-thumb-placeholder">${esc(p.genre)}</div>`;
+    ? `<img class="xthumb-inner" src="${thumbSrc}" alt="" loading="lazy">`
+    : `<div class="xthumb-ph">${esc(p.genre)}</div>`;
 
-  // Extra ref thumbs (beyond the first / YouTube thumb)
-  const extraRefs = (p.visual_refs || []).filter(f => f !== 'youtube_thumb.jpg').slice(0, 4);
-  const extraRefHtml = extraRefs.map(fname =>
-    `<img class="hcard-mini-ref" src="/api/projects/${p.id}/refs/${encodeURIComponent(fname)}" alt="" loading="lazy">`
-  ).join('');
+  const extraRefs = (p.visual_refs || []).filter(f => f !== 'youtube_thumb.jpg').slice(0, 3);
+  const refsHtml = extraRefs.map(fname =>
+    `<div class="xref-mini"><img src="/api/projects/${p.id}/refs/${encodeURIComponent(fname)}" alt="" style="width:100%;height:100%;object-fit:cover"></div>`
+  ).join('') + `<label class="xref-mini" style="border:1px dashed var(--b2);background:transparent;cursor:pointer"><input type="file" accept=".png,.jpg,.jpeg,.webp,.gif" multiple style="display:none" onchange="cardUploadRefs('${p.id}', this.files); this.value='';">+</label>`;
 
-  // Copyable row helper — 1 line, truncated, with copy
   function copyRow(label, text) {
     if (!text) return '';
     return `
-      <div class="hcard-row" data-copy="${attr(text)}">
-        <span class="hcard-row-label">${label}</span>
-        <span class="hcard-row-text">${esc(text)}</span>
-        <button class="copy-btn" onclick="copyText(this)">Copy</button>
+      <div class="copy-row" data-copy="${attr(text)}">
+        <span class="cr-label">${label}</span>
+        <span class="cr-value">${esc(text)}</span>
+        <button class="cr-copy" onclick="copyText(this)">${copyIcon}</button>
       </div>
     `;
   }
 
-  // Mood + motif inline
   const moodChips = (moodsCache || []).map(m => {
     const on = (p.mood_tags || []).includes(m.name);
-    return `<button class="mood-chip-sm ${on ? 'on' : ''}" onclick="cardToggleMood('${p.id}', '${m.name}')">${esc(m.label)}</button>`;
+    return `<button class="xmchip ${on ? 'on' : ''}" data-m="${m.name}" onclick="cardToggleMood('${p.id}', '${m.name}')">${esc(m.label)}</button>`;
   }).join('');
 
   const motifChips = (p.motif_tags || []).map(t =>
-    `<span class="motif-tag-sm">${esc(t)}<button class="motif-remove" onclick="cardRemoveMotif('${p.id}', '${esc(t)}')">×</button></span>`
+    `<span class="motif-tag">${esc(t)}<button class="motif-remove" onclick="cardRemoveMotif('${p.id}', '${esc(t)}')" style="background:none;border:none;color:var(--t3);cursor:pointer;font-size:11px;padding:0 2px;margin-left:2px">x</button></span>`
   ).join('');
 
-  const pipelineBtn = !lite ? `<button class="btn btn-secondary btn-sm" onclick="openProject('${p.id}')">Pipeline</button>` : '';
-
   const tagsText = (meta.tags || []).map(t => '#' + t).join(' ');
+  const pipelineBtn = !lite ? `<button class="btn btn-s" style="font-size:10px;padding:3px 9px" onclick="openProject('${p.id}')">Pipeline</button>` : '';
 
   return `
-    <div class="hcard" data-card="${p.id}">
-      <div class="hcard-left">
-        <div class="hcard-thumb">${thumbHtml}</div>
-        ${extraRefHtml ? `<div class="hcard-extra-refs">${extraRefHtml}</div>` : ''}
-        <label class="hcard-upload-btn">
-          <input type="file" accept=".png,.jpg,.jpeg,.webp,.gif" multiple style="display:none"
-                 onchange="cardUploadRefs('${p.id}', this.files); this.value='';">
-          + Ref
-        </label>
-      </div>
-      <div class="hcard-right">
-        <div class="hcard-header">
-          <div class="hcard-title-block">
-            <div class="hcard-title">${esc(title)}</div>
-            <div class="hcard-meta">
-              <code>${esc(p.genre)}</code> ${substyleBadge} ${statsLine}
-              ${p.created_at ? `<span>${formatDate(p.created_at)}</span>` : ''}
+    <div class="xcard open ${isGold ? 'gold' : ''}" data-card="${p.id}">
+      <div class="xcard-inner">
+        <div class="xcard-left">
+          <div class="xthumb">${thumbHtml}</div>
+          <div class="xrefs">${refsHtml}</div>
+          <div class="xstats">
+            <div class="xstat"><div class="xstat-n" ${isGold ? 'style="color:var(--gold)"' : ''}>${stats.views ? Number(stats.views).toLocaleString() : '—'}</div><div class="xstat-l">조회</div></div>
+            <div class="xstat"><div class="xstat-n">${stats.likes || '—'}</div><div class="xstat-l">좋아요</div></div>
+          </div>
+        </div>
+        <div class="xcard-right">
+          <div class="xcard-head">
+            <div class="xcard-ttl">${esc(title)}</div>
+            <span class="xcard-date">${p.created_at ? formatDate(p.created_at) : ''}</span>
+          </div>
+          ${copyRow('Style', sp.style)}
+          ${copyRow('Prompt', sp.prompt)}
+          ${copyRow('Title', meta.title)}
+          ${copyRow('1st', meta.first_comment)}
+          ${tagsText ? copyRow('Tags', tagsText) : ''}
+          <div class="xcard-chips">
+            ${moodChips}
+            ${motifChips}
+            <input class="hcard-motif-input" placeholder="+ motif"
+                   onkeydown="if(event.key==='Enter' && this.value.trim()){cardAddMotif('${p.id}', this.value.trim()); this.value='';event.preventDefault();}">
+          </div>
+          <div>
+            <div class="notes-toggle" onclick="toggleNotes(this)">
+              <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              메모 / 제목 고정
+            </div>
+            <div class="notes-body">
+              <input class="form-input" placeholder="제목 고정" value="${attr(p.title_lock || '')}"
+                     oninput="cardScheduleSave('${p.id}', 'title_lock', this.value)" style="margin-bottom:6px">
+              <textarea class="form-input" rows="2" placeholder="작업 메모"
+                        oninput="cardScheduleSave('${p.id}', 'notes', this.value)">${esc(p.notes || '')}</textarea>
             </div>
           </div>
-          <div class="hcard-actions">
-            <button class="btn btn-secondary btn-sm" onclick="cardRegenMeta('${p.id}')">Regen</button>
+          <div class="xcard-actions">
+            <button class="btn btn-s" style="font-size:10px;padding:3px 9px" onclick="cardRegenMeta('${p.id}')">재생성</button>
             ${pipelineBtn}
-            <button class="btn btn-danger btn-sm" onclick="cardDelete('${p.id}')">Del</button>
-            <button class="btn btn-secondary btn-sm" onclick="toggleCardExpand('${p.id}')" title="접기">&#9652;</button>
+            <button class="btn btn-s" style="font-size:10px;padding:3px 9px;color:var(--error)" onclick="cardDelete('${p.id}')">삭제</button>
+            <button class="btn btn-p" style="font-size:10px;padding:3px 9px" onclick="toggleCardExpand('${p.id}')">접기</button>
           </div>
         </div>
-
-        ${copyRow('Style', sp.style)}
-        ${copyRow('Prompt', sp.prompt)}
-        ${copyRow('Title', meta.title)}
-        ${copyRow('1st Comment', meta.first_comment)}
-        ${tagsText ? copyRow('Tags', tagsText) : ''}
-
-        <div class="hcard-tags-row">
-          ${moodChips}
-          <span class="hcard-divider"></span>
-          ${motifChips}
-          <input class="hcard-motif-input" placeholder="+ motif"
-                 onkeydown="if(event.key==='Enter' && this.value.trim()){cardAddMotif('${p.id}', this.value.trim()); this.value='';event.preventDefault();}">
-        </div>
-
-        <details class="hcard-more">
-          <summary class="text-sm text-3">Notes / Title Lock / Details</summary>
-          <div class="hcard-details">
-            <input class="form-input" placeholder="Title Lock" value="${attr(p.title_lock || '')}"
-                   oninput="cardScheduleSave('${p.id}', 'title_lock', this.value)">
-            <textarea class="form-input" rows="2" placeholder="Notes"
-                      oninput="cardScheduleSave('${p.id}', 'notes', this.value)">${esc(p.notes || '')}</textarea>
-            ${sp.lyrics ? copyRow('Lyrics', sp.lyrics) : ''}
-            ${meta.description ? copyRow('Description', meta.description) : ''}
-          </div>
-        </details>
       </div>
     </div>
   `;
+}
+
+function toggleNotes(el) {
+  const body = el.nextElementSibling;
+  const svg = el.querySelector('svg');
+  body.classList.toggle('open');
+  if (svg) svg.style.transform = body.classList.contains('open') ? 'rotate(180deg)' : '';
 }
 
 function formatDate(iso) {
@@ -516,6 +528,18 @@ function showCreateModal() {
   document.getElementById('create-modal').classList.remove('hidden');
   const genreInput = document.querySelector('#create-form [name=genre]');
   genreInput.focus();
+  // Populate genre presets
+  const presetsEl = document.getElementById('genre-presets');
+  if (presetsEl) {
+    const genres = {};
+    for (const p of dashboardProjects) {
+      if (p.genre) genres[p.genre] = (genres[p.genre] || 0) + 1;
+    }
+    const sorted = Object.entries(genres).sort((a,b) => b[1]-a[1]).slice(0, 8);
+    presetsEl.innerHTML = sorted.map(([g]) =>
+      `<button type="button" class="gpchip" onclick="this.parentElement.querySelectorAll('.gpchip').forEach(c=>c.classList.remove('on'));this.classList.add('on');document.querySelector('#create-form [name=genre]').value='${esc(g)}'">${esc(g)}</button>`
+    ).join('');
+  }
   if (!genreInput._substyleWired) {
     genreInput._substyleWired = true;
     genreInput.addEventListener('input', updateSubstyleVisibility);
@@ -593,9 +617,11 @@ let motifsCache = null;
 async function openProject(id) {
   document.getElementById('view-dashboard').classList.add('hidden');
   document.getElementById('view-project').classList.remove('hidden');
+  document.getElementById('view-editor')?.classList.add('hidden');
 
-  document.getElementById('nav-left').innerHTML =
-    `<button class="nav-back" onclick="loadDashboard()">&larr; Projects</button>`;
+  // nav-right gets lite toggle + delete; brand is static
+  document.getElementById('nav-right').innerHTML =
+    `${renderLiteToggle()}<button class="btn btn-s" style="color:var(--error)" onclick="deleteProject('${id}')">삭제</button>`;
 
   const content = document.getElementById('step-content');
   content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
@@ -604,11 +630,9 @@ async function openProject(id) {
 
   try {
     currentProject = await api('GET', `/projects/${id}`);
-    document.getElementById('nav-right').innerHTML =
-      `${renderLiteToggle()}<button class="btn btn-danger btn-sm" onclick="deleteProject('${id}')">Delete</button>`;
     renderProject();
   } catch (err) {
-    content.innerHTML = `<div class="empty-state" style="color:var(--error)">${err.message}</div>`;
+    content.innerHTML = `<div style="text-align:center;padding:40px;color:var(--error)">${err.message}</div>`;
   }
 }
 
@@ -1290,13 +1314,12 @@ function attr(s) {
 }
 
 function copyText(btn) {
-  const card = btn.closest('[data-copy]');
-  if (!card) return;
-  const text = card.getAttribute('data-copy');
+  const row = btn.closest('[data-copy]');
+  if (!row) return;
+  const text = row.dataset.copy;
   navigator.clipboard.writeText(text).then(() => {
-    btn.textContent = 'Copied';
-    btn.classList.add('copied');
-    card.classList.add('copied');
+    btn.style.color = 'var(--t1)';
+    setTimeout(() => { btn.style.color = ''; }, 1400);
   });
 }
 
@@ -1308,12 +1331,13 @@ let currentTab = 'shorts';
 
 function switchTab(tab) {
   currentTab = tab;
-  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-  document.querySelector(`.nav-tab[onclick="switchTab('${tab}')"]`).classList.add('active');
+  document.querySelectorAll('.ntab').forEach(t => t.classList.remove('on'));
+  const activeTab = document.querySelector(`.ntab[onclick="switchTab('${tab}')"]`);
+  if (activeTab) activeTab.classList.add('on');
 
   document.getElementById('view-dashboard').classList.add('hidden');
   document.getElementById('view-project').classList.add('hidden');
-  document.getElementById('view-editor').classList.add('hidden');
+  document.getElementById('view-editor')?.classList.add('hidden');
 
   if (tab === 'shorts') {
     loadDashboard();
@@ -1329,7 +1353,6 @@ let editorImages = [];
 
 function showEditor() {
   document.getElementById('view-editor').classList.remove('hidden');
-  document.getElementById('nav-left').innerHTML = '<span class="nav-title">YouTube Shorts Music</span>';
   document.getElementById('nav-right').innerHTML = '';
 
   editorSongs = [];

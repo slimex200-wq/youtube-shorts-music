@@ -5,51 +5,47 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>YouTube Shorts Music</title>
   <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
 
-<nav>
-  <div class="container">
-    <div id="nav-left">
-      <span class="nav-title">YouTube Shorts Music</span>
-    </div>
-    <div id="nav-tabs">
-      <button class="nav-tab active" onclick="switchTab('shorts')">Shorts</button>
-      <button class="nav-tab" onclick="switchTab('editor')">Editor</button>
-    </div>
-    <div id="nav-right"></div>
+<nav class="nav">
+  <div class="nav-brand">
+    <span class="nav-brand-dot"></span>
+    Eisenherz
   </div>
+  <div class="nav-divider"></div>
+  <div class="nav-tabs" id="nav-tabs">
+    <button class="ntab on" onclick="switchTab('shorts')">라이브러리</button>
+    <button class="ntab" onclick="switchTab('editor')">에디터</button>
+  </div>
+  <div class="nav-right" id="nav-right"></div>
 </nav>
 
 <!-- Dashboard -->
 <div id="view-dashboard">
-  <section class="container">
-    <div class="section-header">
-      <span class="section-title">Projects</span>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-secondary btn-sm" id="sync-yt-btn" onclick="handleYouTubeSync()">Sync YouTube</button>
-        <button class="btn btn-primary btn-sm" onclick="showCreateModal()">New Project</button>
-      </div>
-    </div>
-    <div id="project-list" class="project-list"></div>
-  </section>
+  <div class="main">
+    <div id="project-list"></div>
+  </div>
 </div>
 
 <!-- Project Detail -->
 <div id="view-project" class="hidden">
-  <section class="container">
+  <div class="main">
     <!-- Steps -->
     <div class="steps" id="steps-bar"></div>
 
     <!-- Step content -->
     <div id="step-content"></div>
-  </section>
+  </div>
 </div>
 
 <!-- Editor View -->
 <div id="view-editor" class="hidden">
-  <section class="container">
+  <div class="main">
+  <section>
     <div class="section-header">
       <span class="section-title">Editor — Images + Music → Full Video</span>
     </div>
@@ -84,16 +80,27 @@
 
     <div id="editor-results" class="mt-16"></div>
   </section>
+  </div>
 </div>
 
 <!-- Create Modal -->
-<div id="create-modal" class="modal-backdrop hidden" onclick="if(event.target===this)hideCreateModal()">
+<div id="create-modal" class="modal-bg hidden" onclick="if(event.target===this)hideCreateModal()">
   <div class="modal">
-    <div class="modal-title">New Project</div>
+    <div class="modal-head">
+      <span class="modal-title">새 프로젝트</span>
+      <button class="modal-close" type="button" onclick="hideCreateModal()">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 3L13 13M13 3L3 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
     <form id="create-form" onsubmit="handleCreate(event)">
-      <div class="form-group">
-        <label class="form-label">Genre</label>
-        <input class="form-input" name="genre" placeholder="lo-fi hip hop, dark trap, shranz..." required>
+      <div class="form-row" style="margin-bottom:12px">
+        <label class="form-label">최근 장르</label>
+        <div class="genre-presets" id="genre-presets"></div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">장르</label>
+        <input class="form-input" name="genre" placeholder="lo-fi hip hop, dark trap, schranz..." required>
       </div>
       <div class="form-group mt-12">
         <label class="form-label">Visual Style</label>
@@ -112,11 +119,12 @@
         </select>
         <div class="text-sm text-3" style="margin-top:4px" id="substyle-hint"></div>
       </div>
-      <div class="modal-actions">
-        <button type="button" class="btn btn-secondary" onclick="hideCreateModal()">Cancel</button>
-        <button type="submit" class="btn btn-primary" id="create-btn">Create</button>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-s" onclick="hideCreateModal()">취소</button>
+        <button type="submit" class="btn btn-p" id="create-btn">만들기</button>
       </div>
     </form>
+    </div>
   </div>
 </div>
 
