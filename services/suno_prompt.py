@@ -25,7 +25,7 @@ Given a genre and options, generate a Suno-compatible prompt that produces profe
 - exclude_styles: Suno "Exclude styles" field. Genres/styles to avoid. English. Empty string if none.
 - vocal_gender: "Male" or "Female" only. If instrumental is better for this genre, set to null.
 - lyrics_mode: "Manual" if you provide lyrics below, "Auto" if Suno should generate, "Instrumental" if no vocals.
-- lyrics: Short lyrics (4-8 lines max, English) if the genre benefits from vocals. null if instrumental is recommended. Keep lyrics punchy, rhythmic, and fitting the mood. For genres like shranz, hard techno, ambient — almost always null.
+- lyrics: Suno-format structured lyrics with section markers. Use markers like [Verse 1], [Verse 2], [Pre-Chorus], [Chorus], [Bridge], [Final Chorus], [Outro] etc. Each section should have 2-4 lines. Write lyrics in the language that best fits the genre and mood (Japanese for Japanese-influenced genres, Korean for K-pop, English for Western genres, etc.). null if instrumental is recommended. For genres like shranz, hard techno, ambient — almost always null.
 - weirdness: Suno experimentalism 0-100. Match to genre character.
 - style_influence: Suno style influence 0-100. Higher = more faithful to prompt.
 - substyle: The substyle name used (only for schranz variants). null for other genres.
@@ -92,7 +92,7 @@ Respond ONLY with JSON:
   "exclude_styles": "genres to avoid",
   "vocal_gender": "Male or Female or null",
   "lyrics_mode": "Manual or Auto or Instrumental",
-  "lyrics": "Short lyrics here\\nLine 2\\nLine 3\\n... or null if instrumental",
+  "lyrics": "[Verse 1]\\nLine 1\\nLine 2\\n\\n[Chorus]\\nHook line 1\\nHook line 2\\n... or null if instrumental",
   "weirdness": 43,
   "style_influence": 55,
   "substyle": "substyle_name or null"

@@ -37,7 +37,7 @@ let expandedCards = new Set(); // track which cards are expanded
 async function loadDashboard() {
   document.getElementById('view-dashboard').classList.remove('hidden');
   document.getElementById('view-project').classList.add('hidden');
-  document.getElementById('view-higgsfield')?.classList.add('hidden');
+
   document.getElementById('view-editor')?.classList.add('hidden');
   // Update nav-right for dashboard
   document.getElementById('nav-right').innerHTML = `
@@ -748,7 +748,7 @@ function showCreateModal() {
     }
     const sorted = Object.entries(genres).sort((a,b) => b[1]-a[1]).slice(0, 8);
     presetsEl.innerHTML = sorted.map(([g]) =>
-      `<button type="button" class="gpchip" onclick="this.parentElement.querySelectorAll('.gpchip').forEach(c=>c.classList.remove('on'));this.classList.add('on');document.querySelector('#create-form [name=genre]').value='${esc(g)}'">${esc(g)}</button>`
+      `<button type="button" class="gpchip" onclick="this.parentElement.querySelectorAll('.gpchip').forEach(c=>c.classList.remove('on'));this.classList.add('on');document.querySelector('#create-form [name=genre]').value='${esc(g)}';updateSubstyleVisibility()">${esc(g)}</button>`
     ).join('');
   }
   if (!genreInput._substyleWired) {
@@ -773,12 +773,10 @@ async function handleCreate(e) {
   btn.innerHTML = '<span class="spinner"></span> Creating...';
 
   const fd = new FormData(form);
-  const style = fd.get('style') || null;
   const substyle = fd.get('substyle') || null;
   const aspect_ratio = fd.get('aspect_ratio') || '9:16';
   const body = {
     genre: fd.get('genre'),
-    style,
     substyle,
     aspect_ratio,
   };
@@ -801,7 +799,6 @@ const STEPS = [
   { key: 'create', label: 'Create', sunoOnly: true },
   { key: 'metadata', label: 'Metadata' },
   { key: 'library', label: 'Library' },
-  { key: 'music', label: 'Music', fullOnly: true },
   { key: 'prompts', label: 'Prompts', fullOnly: true },
   { key: 'assets', label: 'Assets', fullOnly: true },
   { key: 'compose', label: 'Compose', fullOnly: true },
@@ -835,7 +832,7 @@ let motifsCache = null;
 async function openProject(id) {
   document.getElementById('view-dashboard').classList.add('hidden');
   document.getElementById('view-project').classList.remove('hidden');
-  document.getElementById('view-higgsfield')?.classList.add('hidden');
+
   document.getElementById('view-editor')?.classList.add('hidden');
 
   // nav-right gets back + lite toggle + delete
@@ -910,14 +907,10 @@ function renderProject() {
 
   if (active === 'create') {
     el.innerHTML = renderStepCreate(p);
-    setupDropzone('music-dropzone', (files) => handleMusicUpload(files[0]));
   } else if (active === 'metadata') {
     el.innerHTML = renderStepMetadata(p);
   } else if (active === 'library') {
     renderStepLibrary(p);
-  } else if (active === 'music') {
-    el.innerHTML = renderStepMusic(p);
-    setupDropzone('music-dropzone', (files) => handleMusicUpload(files[0]));
   } else if (active === 'prompts') {
     el.innerHTML = renderStepPrompts(p);
   } else if (active === 'assets') {
@@ -937,17 +930,41 @@ function renderStepCreate(p) {
   if (!p.suno_prompt) {
     return `<div class="card"><div class="text-2 text-sm">Suno prompt not generated. Check API key.</div></div>`;
   }
-  return renderSunoPrompt(p) + `<div class="mt-16">${renderMusicUpload()}</div>`;
+  return renderSunoPrompt(p) + renderVideoPrompts(p);
 }
 
-// --- Step: Music ---
+function renderVideoPrompts(p) {
+  if (!p.video_prompts || !p.video_prompts.length) return '';
+  const copyIcon = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5" stroke="currentColor" stroke-width="1.5"/></svg>';
 
-function renderMusicUpload() {
+  const cards = p.video_prompts.map(vp => {
+    const strength = vp.motion_strength || 3;
+    const dots = Array.from({length: 5}, (_, i) =>
+      `<span class="hf-dot ${i < strength ? 'on' : ''}"></span>`
+    ).join('');
+
+    return `
+      <div class="hf-card" data-copy="${attr(vp.prompt)}">
+        <div class="hf-card-head">
+          <span class="hf-card-type" data-type="${vp.type}">${esc(vp.label || vp.type)}</span>
+          <div class="hf-card-meta">
+            <span>${esc(vp.camera || '')}</span>
+            <span>${esc(vp.duration || '5s')}</span>
+          </div>
+        </div>
+        <div class="hf-card-prompt">${esc(vp.prompt)}</div>
+        <div class="hf-card-foot">
+          <div class="hf-strength" title="Motion Strength ${strength}">${dots}<span class="text-sm text-3" style="margin-left:4px">MS ${strength}</span></div>
+          <button class="copy-btn" onclick="copyText(this)">${copyIcon} Copy</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
   return `
-    <div id="music-dropzone" class="dropzone">
-      <div class="dropzone-label">Drop MP3 here or click to upload</div>
-      <div class="dropzone-hint">.mp3 &middot; Max 58s recommended for Shorts</div>
-      <input type="file" accept=".mp3,.wav,.m4a" style="display:none">
+    <div class="mt-16">
+      <div class="prompt-card-title" style="margin-bottom:10px">Video Prompts</div>
+      <div class="hf-output">${cards}</div>
     </div>
   `;
 }
@@ -1007,11 +1024,6 @@ function renderSunoOptions(sp) {
       </div>
     </div>
   `;
-}
-
-function renderStepMusic(p) {
-  const metaCard = p.metadata ? renderMetadataCard(p.metadata) + '<div class="mt-16"></div>' : '';
-  return metaCard + renderSunoPrompt(p) + renderMusicUpload();
 }
 
 // --- Step: Metadata ---
@@ -1587,13 +1599,10 @@ function switchTab(tab) {
 
   document.getElementById('view-dashboard').classList.add('hidden');
   document.getElementById('view-project').classList.add('hidden');
-  document.getElementById('view-higgsfield')?.classList.add('hidden');
   document.getElementById('view-editor')?.classList.add('hidden');
 
   if (tab === 'shorts') {
     loadDashboard();
-  } else if (tab === 'higgsfield') {
-    showHiggsfield();
   } else if (tab === 'editor') {
     showEditor();
   }
@@ -1704,97 +1713,6 @@ async function loadEditorHistory() {
     const data = await api('GET', '/editor/files');
     if (data.files.length) renderEditorResults(data.files);
   } catch (_) {}
-}
-
-// --- Higgsfield ---
-
-let hfFile = null;
-
-function showHiggsfield() {
-  document.getElementById('view-higgsfield').classList.remove('hidden');
-  document.getElementById('nav-right').innerHTML = '';
-
-  hfFile = null;
-  document.getElementById('hf-preview').innerHTML = '';
-  document.getElementById('hf-output').innerHTML = '';
-  document.getElementById('hf-generate-btn').disabled = true;
-  document.getElementById('hf-status').textContent = '';
-
-  // Populate project select for context
-  const select = document.getElementById('hf-project-select');
-  select.innerHTML = '<option value="">No context</option>';
-  for (const p of dashboardProjects) {
-    const title = p.title_lock || (p.metadata && p.metadata.title) || p.id;
-    select.innerHTML += `<option value="${p.id}">${esc(title)}</option>`;
-  }
-
-  setupDropzone('hf-dropzone', (files) => {
-    const f = files[0];
-    if (!f) return;
-    hfFile = f;
-    const url = URL.createObjectURL(f);
-    document.getElementById('hf-preview').innerHTML = `<img src="${url}" alt="preview">`;
-    document.getElementById('hf-generate-btn').disabled = false;
-  });
-}
-
-async function handleHfGenerate() {
-  if (!hfFile) return;
-
-  const btn = document.getElementById('hf-generate-btn');
-  const status = document.getElementById('hf-status');
-  const output = document.getElementById('hf-output');
-
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Analyzing...';
-  status.textContent = 'Claude Vision + Visual KB processing...';
-  output.innerHTML = '';
-
-  const fd = new FormData();
-  fd.append('image', hfFile);
-  const pid = document.getElementById('hf-project-select').value;
-  if (pid) fd.append('pid', pid);
-
-  try {
-    const result = await api('POST', '/higgsfield/prompts', fd, true);
-    status.textContent = '';
-    renderHfPrompts(result.prompts);
-  } catch (e) {
-    status.textContent = '';
-    output.innerHTML = `<div style="padding:20px;color:var(--error)">${esc(e.message)}</div>`;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Generate 4 Prompts';
-  }
-}
-
-function renderHfPrompts(prompts) {
-  const output = document.getElementById('hf-output');
-  const copyIcon = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5" stroke="currentColor" stroke-width="1.5"/></svg>';
-
-  output.innerHTML = prompts.map(p => {
-    const strength = p.motion_strength || 3;
-    const dots = Array.from({length: 5}, (_, i) =>
-      `<span class="hf-dot ${i < strength ? 'on' : ''}"></span>`
-    ).join('');
-
-    return `
-      <div class="hf-card" data-copy="${attr(p.prompt)}">
-        <div class="hf-card-head">
-          <span class="hf-card-type" data-type="${p.type}">${esc(p.label || p.type)}</span>
-          <div class="hf-card-meta">
-            <span>${esc(p.camera || '')}</span>
-            <span>${esc(p.duration || '5s')}</span>
-          </div>
-        </div>
-        <div class="hf-card-prompt">${esc(p.prompt)}</div>
-        <div class="hf-card-foot">
-          <div class="hf-strength" title="Motion Strength ${strength}">${dots}<span class="text-sm text-3" style="margin-left:4px">MS ${strength}</span></div>
-          <button class="copy-btn" onclick="copyText(this)">${copyIcon} Copy</button>
-        </div>
-      </div>
-    `;
-  }).join('');
 }
 
 function selectRatio(el, value) {

@@ -1,8 +1,7 @@
-"""Higgsfield 4-set video prompt generator.
+"""Video prompt generator — text-based, runs alongside Suno prompt.
 
-Takes a reference image, analyzes it with Claude vision, and produces
-four distinct Higgsfield/Kling video prompts — each with a different
-camera movement and motion style.
+Generates 4 Higgsfield/Kling video prompts from genre, mood, and style context.
+No image input required.
 """
 import logging
 from typing import Optional
@@ -15,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are an expert video prompt engineer for AI video generation tools (Higgsfield, Kling 3.0).
 
-Given a reference image, you analyze its content, composition, subject, mood, and lighting,
-then produce exactly 4 video prompts — each with a DIFFERENT motion style.
+Given a music genre, mood, and visual style, produce exactly 4 video prompts — each with a DIFFERENT motion style.
+These prompts will be used to generate short video clips for YouTube Shorts music videos.
 
 # The 4 Motion Types (MUST produce all 4)
 
@@ -39,7 +38,7 @@ then produce exactly 4 video prompts — each with a DIFFERENT motion style.
 # Prompt Structure
 
 Each prompt must follow this formula in order:
-1. Subject & scene description (from the image — be SPECIFIC about what you see)
+1. Subject & scene description (create a vivid scene matching the music genre and mood)
 2. Camera movement instruction
 3. Motion/animation details
 4. Lighting & mood
@@ -51,11 +50,11 @@ Each prompt must follow this formula in order:
 
 - Prompts in ENGLISH only
 - Each prompt must be 2-3 sentences, 40-80 words
-- Describe what you ACTUALLY SEE in the image — don't invent new subjects
-- Keep the same subject/scene across all 4 prompts, only vary camera + motion
-- Match the mood/tone of the original image
-- For realistic/masked characters: motion_strength 4-5
-- For anime/illustrated style: motion_strength 1-2
+- All 4 prompts should share the same scene/subject, only varying camera + motion
+- Match the mood and aesthetic of the music genre
+- For anime style: use anime/illustration visual language, motion_strength 1-2
+- For cyberpunk: neon lights, rain, holograms
+- For dark/industrial: concrete, steel, smoke, harsh lighting
 
 # Output Format
 
@@ -75,14 +74,16 @@ Return a JSON array of exactly 4 objects:
 ```
 """
 
-USER_TEMPLATE = """Analyze this reference image and generate 4 Higgsfield video prompts.
+USER_TEMPLATE = """Generate 4 video prompts for a YouTube Shorts music video.
 
-{context}
+Genre: {genre}
+Visual Style: {style}
+{extras}
 
 Return ONLY a JSON array with exactly 4 prompt objects. No other text."""
 
 
-class HiggsFieldPromptGenerator:
+class VideoPromptGenerator:
     def __init__(
         self,
         channel: str = "default",
@@ -95,38 +96,33 @@ class HiggsFieldPromptGenerator:
 
     def generate(
         self,
-        image_data: bytes,
-        image_media_type: str,
-        genre: str = "",
+        genre: str,
+        style: str = "",
         mood_tags: list[str] | None = None,
         motif_tags: list[str] | None = None,
-        notes: str = "",
     ) -> list[dict]:
-        """Generate 4 Higgsfield video prompts from a reference image."""
+        """Generate 4 video prompts from genre/style/mood context."""
         client = self.llm or default_client()
         system = wrap_system_prompt(SYSTEM_PROMPT, self.channel)
 
-        context_parts = []
-        if genre:
-            context_parts.append(f"Genre: {genre}")
+        extras_parts = []
         if mood_tags:
-            context_parts.append(f"Mood: {', '.join(mood_tags)}")
+            extras_parts.append(f"Mood: {', '.join(mood_tags)}")
         if motif_tags:
-            context_parts.append(f"Motifs: {', '.join(motif_tags)}")
-        if notes:
-            context_parts.append(f"Notes: {notes}")
+            extras_parts.append(f"Motifs: {', '.join(motif_tags)}")
+        extras = "\n".join(extras_parts) if extras_parts else ""
 
-        context = "\n".join(context_parts) if context_parts else "No additional context."
-        user_text = USER_TEMPLATE.format(context=context)
+        user_text = USER_TEMPLATE.format(
+            genre=genre,
+            style=style or "genre-based",
+            extras=extras,
+        )
 
-        response = client.complete_vision(
+        response = client.complete(
             system=system,
-            user_text=user_text,
-            image_data=image_data,
-            image_media_type=image_media_type,
+            user=user_text,
             model=self.model,
             max_tokens=2048,
-            timeout=120,
         )
 
         prompts = parse_claude_json(response)

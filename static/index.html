@@ -19,7 +19,6 @@
   <div class="nav-divider"></div>
   <div class="nav-tabs" id="nav-tabs">
     <button class="ntab on" onclick="switchTab('shorts')">라이브러리</button>
-    <button class="ntab" onclick="switchTab('higgsfield')">영상화</button>
     <button class="ntab" onclick="switchTab('editor')">에디터</button>
   </div>
   <div class="nav-right" id="nav-right"></div>
@@ -50,44 +49,6 @@
   </div>
 </div>
 
-<!-- Higgsfield View -->
-<div id="view-higgsfield" class="hidden">
-  <div class="main">
-  <section>
-    <div class="section-header">
-      <span class="section-title">Higgsfield 4-Set Prompt Generator</span>
-    </div>
-
-    <div class="hf-layout">
-      <div class="hf-input">
-        <div class="hf-drop-label">Reference Image</div>
-        <div id="hf-dropzone" class="dropzone">
-          <div class="dropzone-label">Drop image here or click</div>
-          <div class="dropzone-hint">.png .jpg .jpeg .webp</div>
-          <input type="file" accept=".png,.jpg,.jpeg,.webp" style="display:none">
-        </div>
-        <div id="hf-preview" class="hf-preview"></div>
-
-        <div class="hf-context-row mt-16">
-          <label class="form-label">Project Context (optional)</label>
-          <select class="form-input" id="hf-project-select">
-            <option value="">No context</option>
-          </select>
-        </div>
-
-        <div class="mt-16" style="display:flex;gap:8px;align-items:center">
-          <button class="btn btn-p" id="hf-generate-btn" onclick="handleHfGenerate()" disabled>
-            Generate 4 Prompts
-          </button>
-          <span id="hf-status" class="text-sm text-3"></span>
-        </div>
-      </div>
-
-      <div class="hf-output" id="hf-output"></div>
-    </div>
-  </section>
-  </div>
-</div>
 
 <!-- Editor View -->
 <div id="view-editor" class="hidden">
@@ -155,16 +116,6 @@
       <div class="form-row">
         <label class="form-label">장르</label>
         <input class="form-input" name="genre" placeholder="lo-fi hip hop, dark trap, schranz..." required>
-      </div>
-      <div class="form-group mt-12">
-        <label class="form-label">Visual Style</label>
-        <select class="form-input" name="style">
-          <option value="">Default (genre-based)</option>
-          <option value="anime" selected>Anime (Japanese animation)</option>
-          <option value="cyberpunk">Cyberpunk</option>
-          <option value="retro">Retro / Vaporwave</option>
-          <option value="watercolor">Watercolor</option>
-        </select>
       </div>
       <div class="form-group mt-12 hidden" id="substyle-group">
         <label class="form-label">Shranz Substyle</label>

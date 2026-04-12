@@ -39,6 +39,7 @@ def _serialize(p: Project) -> dict:
         "instrumental": p.instrumental,
         "lyrics": p.lyrics,
         "suno_prompt": p.suno_prompt,
+        "video_prompts": p.video_prompts,
         "music_file": p.music_file,
         "bpm": p.bpm,
         "duration_sec": p.duration_sec,
@@ -90,6 +91,19 @@ async def create_project(req: CreateRequest):
         )
     except Exception as e:
         logger.warning("Suno prompt generation failed: %s", e)
+
+    # Video prompts (alongside Suno)
+    from services.higgsfield_prompt import VideoPromptGenerator
+
+    vgen = VideoPromptGenerator()
+    try:
+        project.video_prompts = vgen.generate(
+            genre=req.genre,
+            style=req.style or "",
+            mood_tags=[req.mood] if req.mood else None,
+        )
+    except Exception as e:
+        logger.warning("Video prompt generation failed: %s", e)
 
     project.save()
     return _serialize(project)
@@ -468,66 +482,6 @@ async def list_substyles():
         for s in SUBSTYLES
     ]
 
-
-# --- Higgsfield Prompt API ---
-
-
-VISION_MEDIA_TYPES = {
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".webp": "image/webp",
-}
-
-
-@app.post("/api/higgsfield/prompts")
-async def generate_higgsfield_prompts(
-    image: UploadFile = File(...),
-    pid: str | None = None,
-):
-    """이미지 → Claude Vision + Visual KB → 4-set Higgsfield 영상 프롬프트"""
-    from services.higgsfield_prompt import HiggsFieldPromptGenerator
-
-    suffix = Path(image.filename).suffix.lower()
-    media_type = VISION_MEDIA_TYPES.get(suffix)
-    if not media_type:
-        raise HTTPException(400, f"Unsupported image format: {suffix}")
-
-    image_data = await image.read()
-    if len(image_data) > 20 * 1024 * 1024:
-        raise HTTPException(400, "Image too large (max 20MB)")
-
-    genre = ""
-    mood_tags: list[str] = []
-    motif_tags: list[str] = []
-    notes = ""
-    if pid:
-        try:
-            project = _load(pid)
-            genre = project.genre or ""
-            mood_tags = project.mood_tags or []
-            motif_tags = project.motif_tags or []
-            notes = project.notes or ""
-        except HTTPException:
-            pass
-
-    gen = HiggsFieldPromptGenerator()
-    try:
-        prompts = gen.generate(
-            image_data=image_data,
-            image_media_type=media_type,
-            genre=genre,
-            mood_tags=mood_tags,
-            motif_tags=motif_tags,
-            notes=notes,
-        )
-    except LLMError as e:
-        raise HTTPException(503, f"LLM backend unavailable: {e}")
-    except Exception as e:
-        logger.exception("Higgsfield prompt generation failed")
-        raise HTTPException(500, f"Higgsfield prompt generation failed: {e}")
-
-    return {"prompts": prompts}
 
 
 # --- Editor API ---
