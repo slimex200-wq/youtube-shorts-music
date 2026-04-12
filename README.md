@@ -1,10 +1,32 @@
 # Eisenherz
 
+Content library + AI prompt workstation for YouTube Shorts music channels.
+
 YouTube Shorts 음악 채널을 위한 콘텐츠 라이브러리 + AI 프롬프트 워크스테이션.
 
 ![Dashboard](static/screenshot-dashboard.png)
 
+---
+
 ## Why
+
+Running a YouTube Shorts music channel, you run into these problems:
+
+- You **forget the prompts** that made your best-performing videos -- what you typed into Suno, what style you used for the video
+- You **judge performance by gut feeling** instead of data -- which genre or substyle actually gets views?
+- You **rewrite prompts from scratch** every time you make a new video
+- You **can't see your entire channel** at a glance
+
+Eisenherz solves this:
+
+1. **Prompt Archive** -- Saves Suno music prompts + video prompts per project. Pull up the exact recipe of any high-performing content anytime.
+2. **YouTube Channel Sync** -- Pulls all videos via Data API v3, tracks views/likes/comments. Auto-classifies Shorts vs Videos.
+3. **Performance Analytics** -- Compare average views and engagement rate by genre and substyle. See what actually works, not what you think works.
+4. **AI Prompt Generation** -- Enter a genre, get Suno prompt + 4-set video prompts instantly. For shranz, auto-rotates through 12 substyles to avoid repetition.
+
+---
+
+## 왜 만들었나
 
 YouTube Shorts 음악 채널을 운영하면 이런 문제가 생깁니다:
 
@@ -20,28 +42,34 @@ Eisenherz는 이 문제를 해결합니다:
 3. **성과 분석** -- 장르별, 서브스타일별 평균 조회수와 engagement rate를 비교. "이번 달은 어떤 스타일이 먹혔나"를 데이터로 봅니다.
 4. **AI 프롬프트 생성** -- 장르만 넣으면 Suno 프롬프트 + 4세트 영상 프롬프트가 동시에 나옵니다. shranz 계열은 12개 서브스타일 중 최근 안 쓴 걸 자동 선택합니다.
 
+---
+
 ## Core Flow
 
 ```
-장르 선택 → Suno 프롬프트 + 영상 프롬프트 자동 생성
-                ↓
-        Suno에서 음악 생성, Kling/Higgsfield에서 영상 생성
-                ↓
-        YouTube 업로드 → 채널 싱크로 자동 라이브러리 등록
-                ↓
-        조회수/engagement 분석 → 다음 콘텐츠에 반영
+Genre select → Suno prompt + Video prompt auto-generation
+장르 선택    → Suno 프롬프트 + 영상 프롬프트 자동 생성
+                    ↓
+          Create music in Suno, video in Kling/Higgsfield
+          Suno에서 음악 생성, Kling/Higgsfield에서 영상 생성
+                    ↓
+          Upload to YouTube → Channel sync auto-registers to library
+          YouTube 업로드   → 채널 싱크로 자동 라이브러리 등록
+                    ↓
+          Analyze views/engagement → Apply insights to next content
+          조회수/engagement 분석  → 다음 콘텐츠에 반영
 ```
 
 ## Features
 
-- **Content Library** -- Shorts(9:16) 그리드 + Videos(16:9) 리스트, 무드 태그, 모티프 태그, 메모
-- **Suno Prompt Generator** -- 장르별 음악 프롬프트 + 구조화 가사 ([Verse], [Chorus] 등)
-- **Video Prompt Generator** -- Zoom/Pan/Subject/Atmosphere 4세트 영상 프롬프트
-- **YouTube Sync** -- 채널 전체 영상 메타데이터 + 통계 자동 수집
-- **Analytics** -- 장르/서브스타일별 성과 랭킹, LLM 비용 추적
-- **YouTube Metadata** -- AI 생성 제목/설명/태그/고정 댓글
-- **Preview** -- 카드에서 바로 YouTube 미리보기 재생
-- **Substyle Diversity** -- shranz/schranz 12개 서브스타일 자동 로테이션
+- **Content Library** -- Shorts(9:16) grid + Videos(16:9) list, mood tags, motif tags, notes
+- **Suno Prompt Generator** -- Genre-aware music prompts + structured lyrics ([Verse], [Chorus], etc.)
+- **Video Prompt Generator** -- 4-set prompts (Zoom/Pan/Subject/Atmosphere) for Higgsfield/Kling
+- **YouTube Sync** -- Auto-pull channel metadata + stats via Data API v3
+- **Analytics** -- Genre/substyle performance ranking, LLM cost tracking
+- **YouTube Metadata** -- AI-generated titles, descriptions, tags, pinned comments
+- **Preview** -- Play YouTube videos directly from cards
+- **Substyle Diversity** -- 12 shranz/schranz substyle auto-rotation
 
 ## Quick Start
 
@@ -49,7 +77,7 @@ Eisenherz는 이 문제를 해결합니다:
 git clone https://github.com/slimex200-wq/youtube-shorts-music.git
 cd youtube-shorts-music
 pip install -r requirements.txt
-cp .env.example .env   # YOUTUBE_API_KEY 설정
+cp .env.example .env   # Set YOUTUBE_API_KEY
 python -m uvicorn web:app --host 127.0.0.1 --port 8000
 ```
 
