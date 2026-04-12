@@ -336,6 +336,7 @@ function renderShortsGridCard(p) {
         ${dur ? `<span class="sgcard-dur">${dur}</span>` : ''}
         ${viewsText ? `<span class="sgcard-views ${isGold ? 'hot' : ''}">${viewsText}</span>` : ''}
         ${moodDots ? `<div class="sgcard-moods">${moodDots}</div>` : ''}
+        ${p.youtube_video_id ? `<button class="sgcard-play" onclick="event.stopPropagation();showMiniPlayer('${p.youtube_video_id}',true)" title="Preview"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg></button>` : ''}
       </div>
       <div class="sgcard-body">
         <div class="sgcard-title">${esc(title)}</div>
@@ -385,6 +386,7 @@ function renderVideoCard(p) {
       <div class="vcard-thumb">
         ${thumbHtml}
         ${dur ? `<span class="vcard-dur">${dur}</span>` : ''}
+        ${p.youtube_video_id ? `<button class="sgcard-play" onclick="event.stopPropagation();showMiniPlayer('${p.youtube_video_id}',false)" title="Preview"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg></button>` : ''}
       </div>
       <div class="vcard-body">
         <div class="vcard-title">${esc(title)}</div>
@@ -710,6 +712,33 @@ function showToast(message, type) {
     toast.classList.remove('show');
     setTimeout(() => toast.remove(), 300);
   }, 4000);
+}
+
+function showMiniPlayer(videoId, isShorts) {
+  const existing = document.getElementById('mini-player-overlay');
+  if (existing) existing.remove();
+
+  const w = isShorts ? 315 : 560;
+  const h = isShorts ? 560 : 315;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'mini-player-overlay';
+  overlay.className = 'mini-player-overlay';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="mini-player" style="width:${w}px;max-width:95vw">
+      <button class="mini-player-close" onclick="this.closest('.mini-player-overlay').remove()">&times;</button>
+      <iframe
+        width="${w}" height="${h}"
+        src="https://www.youtube.com/embed/${videoId}?autoplay=1"
+        frameborder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowfullscreen
+        style="border-radius:8px;width:100%;aspect-ratio:${isShorts ? '9/16' : '16/9'};height:auto"
+      ></iframe>
+    </div>
+  `;
+  document.body.appendChild(overlay);
 }
 
 async function cardDelete(pid) {
@@ -1257,6 +1286,7 @@ function renderStepMetadata(p) {
     `;
   }
   return `
+    ${renderYouTubeEmbed(p)}
     ${renderMetadataCard(p.metadata)}
     <div class="mt-16" style="display:flex;gap:8px">
       ${p.suno_prompt ? `<button class="btn btn-secondary" onclick="handleBackToCreate()">&larr; Create</button>` : ''}
@@ -1266,6 +1296,25 @@ function renderStepMetadata(p) {
       <button class="btn btn-primary" onclick="handleAdvanceToLibrary()">
         Next: Library &rarr;
       </button>
+    </div>
+  `;
+}
+
+function renderYouTubeEmbed(p) {
+  if (!p.youtube_video_id) return '';
+  const isShorts = projectIsShorts(p);
+  const w = isShorts ? 270 : 480;
+  const h = isShorts ? 480 : 270;
+  return `
+    <div class="yt-embed mb-12" style="max-width:${w}px">
+      <iframe
+        width="${w}" height="${h}"
+        src="https://www.youtube.com/embed/${p.youtube_video_id}"
+        frameborder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowfullscreen
+        style="border-radius:8px;width:100%;aspect-ratio:${isShorts ? '9/16' : '16/9'};height:auto"
+      ></iframe>
     </div>
   `;
 }

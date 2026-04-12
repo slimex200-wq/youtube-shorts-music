@@ -147,7 +147,7 @@ def _extract_genre_from_tags(tags: list[str]) -> str:
         for tag in tags_lower:
             if keyword in tag:
                 return keyword
-    return tags_lower[0] if tags_lower else "unknown"
+    return tags_lower[0] if tags_lower else "shranz"
 
 
 def sync_channel(

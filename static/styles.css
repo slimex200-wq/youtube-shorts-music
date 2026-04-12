@@ -549,6 +549,15 @@ section{padding:32px 0}
   .hcard-thumb{width:120px;height:68px}
 }
 
+/* ── MINI PLAYER ── */
+.sgcard-play{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.7);border:1px solid rgba(255,255,255,.2);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity .2s}
+.sgcard-thumb:hover .sgcard-play,.vcard-thumb:hover .sgcard-play{opacity:1}
+.sgcard-play:hover{background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.4)}
+.mini-player-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(4px)}
+.mini-player{position:relative}
+.mini-player-close{position:absolute;top:-32px;right:0;background:none;border:none;color:var(--t2);font-size:24px;cursor:pointer;padding:4px 8px}
+.mini-player-close:hover{color:#fff}
+
 /* ── ANALYTICS ── */
 .analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 @media(max-width:700px){.analytics-grid{grid-template-columns:1fr}}
