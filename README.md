@@ -86,20 +86,32 @@ Genre select → Suno prompt + Video prompt auto-generation
 
 ## Quick Start
 
+### Docker (recommended)
+
 ```bash
 git clone https://github.com/slimex200-wq/youtube-shorts-music.git
 cd youtube-shorts-music
-pip install -r requirements.txt
 cp .env.example .env   # Set YOUTUBE_API_KEY, YOUTUBE_CHANNEL_HANDLE
+docker compose up
+```
+
+Open `http://localhost:8000`
+
+### Local
+
+```bash
+pip install -r requirements.txt
+cp .env.example .env
 python -m uvicorn web:app --host 127.0.0.1 --port 8000
 ```
 
-Open `http://127.0.0.1:8000`
+### Deploy to Cloud
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template/tuneboard?referralCode=)
 
 ## Requirements
 
-- Python 3.11+
-- FFmpeg (for video composition)
+- Docker (recommended) or Python 3.11+ with FFmpeg
 - Claude CLI (free on Max) or Anthropic API key
 
 ### LLM Backends
