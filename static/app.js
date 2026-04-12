@@ -24,7 +24,13 @@ async function api(method, path, body, isFormData = false) {
 // --- Dashboard ---
 
 let dashboardProjects = [];
-let dashboardQuery = '';
+let dashboardFilters = {
+  query: '',
+  moods: new Set(),
+  substyle: '',
+};
+let saveTimers = {}; // per-card debounce timers for notes/title_lock
+let expandedCards = new Set(); // track which cards are expanded
 
 async function loadDashboard() {
   document.getElementById('view-dashboard').classList.remove('hidden');
@@ -63,10 +69,49 @@ function handleLiteToggle(on) {
   }
 }
 
-function renderProjectList() {
+function filterProjects() {
+  const q = dashboardFilters.query.trim().toLowerCase();
+  const wantMoods = dashboardFilters.moods;
+  const wantSubstyle = dashboardFilters.substyle;
+
+  return dashboardProjects.filter(p => {
+    if (q) {
+      const hay = [
+        p.id, p.genre,
+        p.title_lock || '',
+        (p.metadata && p.metadata.title) || '',
+        (p.suno_prompt && p.suno_prompt.prompt) || '',
+        (p.suno_prompt && p.suno_prompt.style) || '',
+        (p.suno_prompt && p.suno_prompt.substyle) || '',
+        (p.mood_tags || []).join(' '),
+        (p.motif_tags || []).join(' '),
+        p.notes || '',
+      ].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (wantMoods.size) {
+      const pm = new Set(p.mood_tags || []);
+      for (const m of wantMoods) if (!pm.has(m)) return false;
+    }
+    if (wantSubstyle) {
+      const ps = (p.suno_prompt && p.suno_prompt.substyle) || '';
+      if (ps !== wantSubstyle) return false;
+    }
+    return true;
+  });
+}
+
+async function renderProjectList() {
   const list = document.getElementById('project-list');
+
+  // Preload mood enum for filter chips
+  if (!moodsCache) {
+    try { moodsCache = await api('GET', '/tags/moods'); }
+    catch { moodsCache = []; }
+  }
+
   if (!dashboardProjects.length) {
-    list.innerHTML = `
+    list.innerHTML = renderFilterBar(0, 0) + `
       <div class="empty-state">
         <div class="empty-state-title">No projects yet</div>
         <div class="text-sm text-3">Create a project to get started</div>
@@ -74,54 +119,383 @@ function renderProjectList() {
     return;
   }
 
-  const q = dashboardQuery.trim().toLowerCase();
-  const filtered = q ? dashboardProjects.filter(p => {
-    const hay = [
-      p.id, p.genre,
-      p.title_lock || '',
-      (p.metadata && p.metadata.title) || '',
-      (p.mood_tags || []).join(' '),
-      (p.motif_tags || []).join(' '),
-      (p.suno_prompt && p.suno_prompt.substyle) || '',
-    ].join(' ').toLowerCase();
-    return hay.includes(q);
-  }) : dashboardProjects;
-
-  const searchBar = `
-    <div class="dashboard-search mb-12">
-      <input class="form-input" placeholder="Search by title, genre, mood, motif..." value="${attr(dashboardQuery)}" oninput="handleDashboardSearch(this.value)">
-      <div class="text-sm text-3" style="margin-top:6px">${filtered.length} / ${dashboardProjects.length}</div>
-    </div>
+  const filtered = filterProjects();
+  const cards = filtered.map(p => renderCard(p)).join('') || `
+    <div class="workspace-empty">No projects match the current filters.</div>
   `;
 
-  const cards = filtered.map(p => {
-    const title = p.title_lock || (p.metadata && p.metadata.title) || p.id;
-    const refs = (p.visual_refs || []).slice(0, 3).map(fname =>
-      `<img class="ref-thumb-mini" src="/api/projects/${p.id}/refs/${encodeURIComponent(fname)}" alt="">`
-    ).join('');
-    const moods = (p.mood_tags || []).map(m => `<span class="mood-chip-mini">${esc(m)}</span>`).join('');
-    return `
-      <div class="card card-clickable project-item" onclick="openProject('${p.id}')">
-        <div class="project-info">
-          <span class="project-title">${esc(title)}</span>
-          <span class="project-meta">
-            ${esc(p.genre)}
-            ${p.bpm ? `&middot; ${p.bpm} BPM` : ''}
-          </span>
-          ${moods ? `<div class="project-moods mt-12">${moods}</div>` : ''}
-        </div>
-        ${refs ? `<div class="project-refs">${refs}</div>` : ''}
-        ${statusBadge(p.status)}
-      </div>
-    `;
+  list.innerHTML = renderStatsBar() + renderFilterBar(filtered.length, dashboardProjects.length) + cards;
+}
+
+function renderFilterBar(matchCount, totalCount) {
+  const moodChips = (moodsCache || []).map(m => {
+    const on = dashboardFilters.moods.has(m.name);
+    return `<button class="mood-chip ${on ? 'on' : ''}" onclick="toggleFilterMood('${m.name}')" title="${esc(m.description)}">${esc(m.label)}</button>`;
   }).join('');
 
-  list.innerHTML = searchBar + cards;
+  const substyles = collectSubstyles();
+  const substyleOptions = ['<option value="">All substyles</option>']
+    .concat(substyles.map(s =>
+      `<option value="${attr(s)}" ${dashboardFilters.substyle === s ? 'selected' : ''}>${esc(s)}</option>`
+    )).join('');
+
+  const hasFilter = dashboardFilters.query || dashboardFilters.moods.size || dashboardFilters.substyle;
+
+  return `
+    <div class="filter-bar">
+      <input class="form-input filter-search" placeholder="Search title, genre, mood, motif, prompt text..."
+             value="${attr(dashboardFilters.query)}"
+             oninput="handleDashboardSearch(this.value)">
+      <select class="form-input filter-substyle" onchange="handleFilterSubstyle(this.value)">${substyleOptions}</select>
+      <div class="filter-moods">${moodChips}</div>
+      ${hasFilter ? `<button class="filter-clear-inline" onclick="clearFilters()">Clear</button>` : ''}
+      <div class="filter-count">${matchCount} / ${totalCount}</div>
+    </div>
+  `;
+}
+
+function collectSubstyles() {
+  const set = new Set();
+  for (const p of dashboardProjects) {
+    const s = p.suno_prompt && p.suno_prompt.substyle;
+    if (s) set.add(s);
+  }
+  return Array.from(set).sort();
 }
 
 function handleDashboardSearch(value) {
-  dashboardQuery = value;
+  dashboardFilters.query = value;
   renderProjectList();
+}
+
+function toggleFilterMood(name) {
+  if (dashboardFilters.moods.has(name)) dashboardFilters.moods.delete(name);
+  else dashboardFilters.moods.add(name);
+  renderProjectList();
+}
+
+function handleFilterSubstyle(value) {
+  dashboardFilters.substyle = value;
+  renderProjectList();
+}
+
+function clearFilters() {
+  dashboardFilters = { query: '', moods: new Set(), substyle: '' };
+  renderProjectList();
+}
+
+// --- Stats bar ---
+
+function renderStatsBar() {
+  const total = dashboardProjects.length;
+  if (!total) return '';
+
+  let totalViews = 0;
+  const genreCounts = {};
+  for (const p of dashboardProjects) {
+    const s = (p.youtube_stats || {}).views || 0;
+    totalViews += s;
+    const g = p.genre || 'unknown';
+    genreCounts[g] = (genreCounts[g] || 0) + 1;
+  }
+  const topGenre = Object.entries(genreCounts).sort((a, b) => b[1] - a[1])[0];
+
+  return `
+    <div class="stats-bar">
+      <span class="stats-item"><strong>${total}</strong> Projects</span>
+      ${totalViews ? `<span class="stats-item"><strong>${totalViews.toLocaleString()}</strong> views</span>` : ''}
+      ${topGenre ? `<span class="stats-item">Top: <strong>${esc(topGenre[0])}</strong> (${topGenre[1]})</span>` : ''}
+    </div>
+  `;
+}
+
+// --- Card render (collapsed / expanded) ---
+
+function toggleCardExpand(pid) {
+  if (expandedCards.has(pid)) expandedCards.delete(pid);
+  else expandedCards.add(pid);
+  refreshCard(pid);
+}
+
+function renderCard(p) {
+  return expandedCards.has(p.id) ? renderExpandedCard(p) : renderCollapsedCard(p);
+}
+
+function renderCollapsedCard(p) {
+  const title = p.title_lock || (p.metadata && p.metadata.title) || p.id;
+  const sp = p.suno_prompt || {};
+  const meta = p.metadata || {};
+  const stats = p.youtube_stats || {};
+  const substyleBadge = sp.substyle ? `<span class="card-badge">${esc(sp.substyle)}</span>` : '';
+
+  const thumbSrc = p.thumbnail_url
+    || ((p.visual_refs && p.visual_refs.length)
+        ? `/api/projects/${p.id}/refs/${encodeURIComponent(p.visual_refs[0])}`
+        : '');
+  const thumbHtml = thumbSrc
+    ? `<img class="ccard-thumb" src="${thumbSrc}" alt="" loading="lazy">`
+    : `<div class="ccard-thumb-ph">${esc(p.genre).slice(0, 6)}</div>`;
+
+  const moodDots = (p.mood_tags || []).map(m =>
+    `<span class="ccard-mood-dot" title="${esc(m)}"></span>`
+  ).join('');
+
+  const viewsText = stats.views ? `${Number(stats.views).toLocaleString()} views` : '';
+
+  return `
+    <div class="ccard" data-card="${p.id}" onclick="toggleCardExpand('${p.id}')">
+      ${thumbHtml}
+      <div class="ccard-info">
+        <span class="ccard-title">${esc(title)}</span>
+        <span class="ccard-meta">
+          <code>${esc(p.genre)}</code> ${substyleBadge} ${moodDots}
+        </span>
+      </div>
+      ${viewsText ? `<span class="ccard-views">${viewsText}</span>` : ''}
+      <div class="ccard-quick-copy">
+        ${sp.style ? `<button class="copy-btn" onclick="event.stopPropagation();navigator.clipboard.writeText(${JSON.stringify(sp.style)})">Style</button>` : ''}
+        ${meta.title ? `<button class="copy-btn" onclick="event.stopPropagation();navigator.clipboard.writeText(${JSON.stringify(meta.title)})">Title</button>` : ''}
+        ${meta.first_comment ? `<button class="copy-btn" onclick="event.stopPropagation();navigator.clipboard.writeText(${JSON.stringify(meta.first_comment)})">1st</button>` : ''}
+      </div>
+      <span class="ccard-expand">&#9662;</span>
+    </div>
+  `;
+}
+
+function renderExpandedCard(p) {
+  const title = p.title_lock || (p.metadata && p.metadata.title) || p.id;
+  const sp = p.suno_prompt || {};
+  const meta = p.metadata || {};
+  const substyleBadge = sp.substyle ? `<span class="card-badge">${esc(sp.substyle)}</span>` : '';
+  const lite = isLiteMode();
+  const stats = p.youtube_stats || {};
+  const statsLine = stats.views ? `<span>${Number(stats.views).toLocaleString()} views</span>` : '';
+
+  // Left: thumbnail / first ref
+  const thumbSrc = p.thumbnail_url
+    || ((p.visual_refs && p.visual_refs.length)
+        ? `/api/projects/${p.id}/refs/${encodeURIComponent(p.visual_refs[0])}`
+        : '');
+  const thumbHtml = thumbSrc
+    ? `<img class="hcard-thumb-img" src="${thumbSrc}" alt="" loading="lazy">`
+    : `<div class="hcard-thumb-placeholder">${esc(p.genre)}</div>`;
+
+  // Extra ref thumbs (beyond the first / YouTube thumb)
+  const extraRefs = (p.visual_refs || []).filter(f => f !== 'youtube_thumb.jpg').slice(0, 4);
+  const extraRefHtml = extraRefs.map(fname =>
+    `<img class="hcard-mini-ref" src="/api/projects/${p.id}/refs/${encodeURIComponent(fname)}" alt="" loading="lazy">`
+  ).join('');
+
+  // Copyable row helper — 1 line, truncated, with copy
+  function copyRow(label, text) {
+    if (!text) return '';
+    return `
+      <div class="hcard-row" data-copy="${attr(text)}">
+        <span class="hcard-row-label">${label}</span>
+        <span class="hcard-row-text">${esc(text)}</span>
+        <button class="copy-btn" onclick="copyText(this)">Copy</button>
+      </div>
+    `;
+  }
+
+  // Mood + motif inline
+  const moodChips = (moodsCache || []).map(m => {
+    const on = (p.mood_tags || []).includes(m.name);
+    return `<button class="mood-chip-sm ${on ? 'on' : ''}" onclick="cardToggleMood('${p.id}', '${m.name}')">${esc(m.label)}</button>`;
+  }).join('');
+
+  const motifChips = (p.motif_tags || []).map(t =>
+    `<span class="motif-tag-sm">${esc(t)}<button class="motif-remove" onclick="cardRemoveMotif('${p.id}', '${esc(t)}')">×</button></span>`
+  ).join('');
+
+  const pipelineBtn = !lite ? `<button class="btn btn-secondary btn-sm" onclick="openProject('${p.id}')">Pipeline</button>` : '';
+
+  const tagsText = (meta.tags || []).map(t => '#' + t).join(' ');
+
+  return `
+    <div class="hcard" data-card="${p.id}">
+      <div class="hcard-left">
+        <div class="hcard-thumb">${thumbHtml}</div>
+        ${extraRefHtml ? `<div class="hcard-extra-refs">${extraRefHtml}</div>` : ''}
+        <label class="hcard-upload-btn">
+          <input type="file" accept=".png,.jpg,.jpeg,.webp,.gif" multiple style="display:none"
+                 onchange="cardUploadRefs('${p.id}', this.files); this.value='';">
+          + Ref
+        </label>
+      </div>
+      <div class="hcard-right">
+        <div class="hcard-header">
+          <div class="hcard-title-block">
+            <div class="hcard-title">${esc(title)}</div>
+            <div class="hcard-meta">
+              <code>${esc(p.genre)}</code> ${substyleBadge} ${statsLine}
+              ${p.created_at ? `<span>${formatDate(p.created_at)}</span>` : ''}
+            </div>
+          </div>
+          <div class="hcard-actions">
+            <button class="btn btn-secondary btn-sm" onclick="cardRegenMeta('${p.id}')">Regen</button>
+            ${pipelineBtn}
+            <button class="btn btn-danger btn-sm" onclick="cardDelete('${p.id}')">Del</button>
+            <button class="btn btn-secondary btn-sm" onclick="toggleCardExpand('${p.id}')" title="접기">&#9652;</button>
+          </div>
+        </div>
+
+        ${copyRow('Style', sp.style)}
+        ${copyRow('Prompt', sp.prompt)}
+        ${copyRow('Title', meta.title)}
+        ${copyRow('1st Comment', meta.first_comment)}
+        ${tagsText ? copyRow('Tags', tagsText) : ''}
+
+        <div class="hcard-tags-row">
+          ${moodChips}
+          <span class="hcard-divider"></span>
+          ${motifChips}
+          <input class="hcard-motif-input" placeholder="+ motif"
+                 onkeydown="if(event.key==='Enter' && this.value.trim()){cardAddMotif('${p.id}', this.value.trim()); this.value='';event.preventDefault();}">
+        </div>
+
+        <details class="hcard-more">
+          <summary class="text-sm text-3">Notes / Title Lock / Details</summary>
+          <div class="hcard-details">
+            <input class="form-input" placeholder="Title Lock" value="${attr(p.title_lock || '')}"
+                   oninput="cardScheduleSave('${p.id}', 'title_lock', this.value)">
+            <textarea class="form-input" rows="2" placeholder="Notes"
+                      oninput="cardScheduleSave('${p.id}', 'notes', this.value)">${esc(p.notes || '')}</textarea>
+            ${sp.lyrics ? copyRow('Lyrics', sp.lyrics) : ''}
+            ${meta.description ? copyRow('Description', meta.description) : ''}
+          </div>
+        </details>
+      </div>
+    </div>
+  `;
+}
+
+function formatDate(iso) {
+  try {
+    return new Date(iso).toISOString().slice(0, 10);
+  } catch { return ''; }
+}
+
+// --- Card action handlers (operate on dashboardProjects[] by pid) ---
+
+function findDashProject(pid) {
+  return dashboardProjects.find(p => p.id === pid);
+}
+
+function replaceDashProject(pid, updated) {
+  const idx = dashboardProjects.findIndex(p => p.id === pid);
+  if (idx >= 0) dashboardProjects[idx] = updated;
+}
+
+function refreshCard(pid) {
+  const el = document.querySelector(`[data-card="${pid}"]`);
+  const p = findDashProject(pid);
+  if (!el || !p) return renderProjectList();
+  el.outerHTML = renderCard(p);
+}
+
+async function cardPatch(pid, body) {
+  try {
+    const updated = await api('PATCH', `/projects/${pid}`, body);
+    replaceDashProject(pid, updated);
+    refreshCard(pid);
+  } catch (e) { alert(e.message); }
+}
+
+async function cardToggleMood(pid, name) {
+  const p = findDashProject(pid);
+  if (!p) return;
+  const current = new Set(p.mood_tags || []);
+  if (current.has(name)) current.delete(name);
+  else current.add(name);
+  await cardPatch(pid, { mood_tags: Array.from(current) });
+}
+
+async function cardAddMotif(pid, tag) {
+  const p = findDashProject(pid);
+  if (!p) return;
+  const current = [...(p.motif_tags || []), tag];
+  await cardPatch(pid, { motif_tags: current });
+  motifsCache = null;
+}
+
+async function cardRemoveMotif(pid, tag) {
+  const p = findDashProject(pid);
+  if (!p) return;
+  const current = (p.motif_tags || []).filter(t => t !== tag);
+  await cardPatch(pid, { motif_tags: current });
+}
+
+function cardScheduleSave(pid, field, value) {
+  const key = `${pid}:${field}`;
+  clearTimeout(saveTimers[key]);
+  saveTimers[key] = setTimeout(async () => {
+    try {
+      const body = {};
+      body[field] = value;
+      const updated = await api('PATCH', `/projects/${pid}`, body);
+      replaceDashProject(pid, updated);
+      // Don't refreshCard — would steal focus from the input. Local update is enough.
+    } catch (e) { console.error(e); }
+  }, 600);
+}
+
+async function cardUploadRefs(pid, files) {
+  if (!files || !files.length) return;
+  const fd = new FormData();
+  for (const f of files) fd.append('files', f);
+  try {
+    const updated = await api('POST', `/projects/${pid}/refs`, fd, true);
+    replaceDashProject(pid, updated);
+    refreshCard(pid);
+  } catch (e) { alert(e.message); }
+}
+
+async function cardDeleteRef(pid, fname) {
+  if (!confirm(`Delete ref "${fname}"?`)) return;
+  try {
+    const updated = await api('DELETE', `/projects/${pid}/refs/${encodeURIComponent(fname)}`);
+    replaceDashProject(pid, updated);
+    refreshCard(pid);
+  } catch (e) { alert(e.message); }
+}
+
+async function cardRegenMeta(pid) {
+  const el = document.querySelector(`[data-card="${pid}"]`);
+  if (el) el.style.opacity = '0.6';
+  try {
+    const updated = await api('POST', `/projects/${pid}/metadata`);
+    replaceDashProject(pid, updated);
+    refreshCard(pid);
+  } catch (e) {
+    alert(e.message);
+    if (el) el.style.opacity = '';
+  }
+}
+
+async function handleYouTubeSync() {
+  const btn = document.getElementById('sync-yt-btn');
+  btn.disabled = true;
+  btn.textContent = 'Syncing...';
+  try {
+    const result = await api('POST', '/sync/youtube');
+    btn.textContent = `Done (${result.synced} new, ${result.updated} updated)`;
+    setTimeout(() => { btn.textContent = 'Sync YouTube'; btn.disabled = false; }, 3000);
+    loadDashboard();
+  } catch (e) {
+    alert(e.message);
+    btn.textContent = 'Sync YouTube';
+    btn.disabled = false;
+  }
+}
+
+async function cardDelete(pid) {
+  if (!confirm('Delete this project?')) return;
+  try {
+    await api('DELETE', `/projects/${pid}`);
+    dashboardProjects = dashboardProjects.filter(p => p.id !== pid);
+    renderProjectList();
+  } catch (e) { alert(e.message); }
 }
 
 function statusBadge(status) {

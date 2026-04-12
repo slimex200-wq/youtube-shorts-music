@@ -49,6 +49,9 @@ def _serialize(p: Project) -> dict:
         "title_lock": p.title_lock,
         "created_at": p.created_at,
         "last_edited_at": p.last_edited_at,
+        "youtube_video_id": p.youtube_video_id,
+        "youtube_stats": p.youtube_stats,
+        "thumbnail_url": p.thumbnail_url,
         "last_error": p.last_error,
     }
 
@@ -395,6 +398,23 @@ async def download_video(pid: str):
     if not finals:
         raise HTTPException(404, "No output video")
     return FileResponse(finals[0], media_type="video/mp4", filename=finals[0].name)
+
+
+# --- YouTube Sync API ---
+
+
+@app.post("/api/sync/youtube")
+async def sync_youtube():
+    from services.youtube_sync import sync_channel
+
+    try:
+        result = sync_channel()
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"YouTube sync failed: {e}")
+
+    return result
 
 
 # --- Tags API ---

@@ -43,6 +43,10 @@ class Project:
     notes: str = ""
     title_lock: Optional[str] = None
     last_edited_at: Optional[str] = None
+    # YouTube sync
+    youtube_video_id: Optional[str] = None
+    youtube_stats: Optional[dict] = None
+    thumbnail_url: Optional[str] = None
     config: dict = field(default_factory=lambda: {
         "upload_privacy": "private",
         "title_card": {
