@@ -4,6 +4,8 @@ AI-powered YouTube Shorts music video production toolkit.
 
 Genre prompt generation, beat-synced video composition, YouTube SEO metadata — all from one dashboard.
 
+![Dashboard](static/screenshot-dashboard.png)
+
 ## Features
 
 - **Suno Prompt Generator** -- Genre-aware music prompts with structured lyrics, substyle diversity (12 shranz/schranz variants)
