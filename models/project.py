@@ -53,7 +53,7 @@ class Project:
         "upload_privacy": "private",
         "title_card": {
             "enabled": True,
-            "artist_name": "Eisenherz",
+            "artist_name": "",
             "fade_in_ms": 800,
             "fade_out_ms": 800,
             "duration_sec": 4,

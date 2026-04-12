@@ -264,7 +264,7 @@ class ShortsComposer:
         gen = TitleCardGenerator()
         ass_path = gen.generate(
             title=title,
-            artist_name=title_card_config.get("artist_name", "Eisenherz"),
+            artist_name=title_card_config.get("artist_name", ""),
             output_dir=video_path.parent,
             start_sec=title_card_config.get("start_sec", 0.5),
             duration_sec=title_card_config.get("duration_sec", 4),

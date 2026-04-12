@@ -10,12 +10,10 @@ from typing import Optional
 
 from googleapiclient.discovery import build
 
-from config import PROJECTS_DIR
+from config import CHANNEL_HANDLE, PROJECTS_DIR
 from models.project import Project
 
 logger = logging.getLogger(__name__)
-
-CHANNEL_HANDLE = "@Eisenherzyy"
 
 
 def _get_service(api_key: str):

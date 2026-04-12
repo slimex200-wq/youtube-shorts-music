@@ -10,6 +10,10 @@ BASE_DIR = Path(__file__).parent
 PROJECTS_DIR = BASE_DIR / "projects"
 
 
+ARTIST_NAME = os.getenv("ARTIST_NAME", "Artist")
+CHANNEL_HANDLE = os.getenv("YOUTUBE_CHANNEL_HANDLE", "")
+
+
 @dataclass
 class Config:
     anthropic_api_key: str = ""
