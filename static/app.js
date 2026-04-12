@@ -127,10 +127,17 @@ async function renderProjectList() {
     catch { moodsCache = []; }
   }
   if (!dashboardProjects.length) {
-    list.innerHTML = renderStatsBar() + renderFilterBar(0, 0) + `
+    list.innerHTML = `
       <div style="text-align:center;padding:60px 20px;color:var(--t3)">
-        <div style="font-size:14px;color:var(--t2);margin-bottom:8px">프로젝트 없음</div>
-        <div style="font-size:12px">새 프로젝트를 생성하여 시작하세요</div>
+        <div style="font-size:20px;font-weight:600;color:var(--t1);margin-bottom:12px">Welcome to TuneBoard</div>
+        <div style="font-size:13px;color:var(--t2);margin-bottom:20px;max-width:400px;margin-left:auto;margin-right:auto">
+          YouTube Shorts 음악 채널을 위한 콘텐츠 라이브러리입니다.<br>
+          시작하려면 설정에서 API 키를 입력하세요.
+        </div>
+        <div style="display:flex;gap:8px;justify-content:center">
+          <button class="btn btn-p" onclick="showSettingsModal()">Settings</button>
+          <button class="btn btn-s" onclick="showCreateModal()">New Project</button>
+        </div>
       </div>`;
     return;
   }
@@ -763,6 +770,48 @@ function statusBadge(status) {
 }
 
 // --- Create ---
+
+// --- Settings ---
+
+async function showSettingsModal() {
+  document.getElementById('settings-modal').classList.remove('hidden');
+  document.getElementById('settings-status').textContent = '';
+  try {
+    const settings = await api('GET', '/settings');
+    const form = document.getElementById('settings-form');
+    for (const [key, val] of Object.entries(settings)) {
+      const input = form.querySelector(`[name="${key}"]`);
+      if (input) input.value = val || '';
+    }
+  } catch (e) {
+    document.getElementById('settings-status').textContent = 'Failed to load settings';
+  }
+}
+
+function hideSettingsModal() {
+  document.getElementById('settings-modal').classList.add('hidden');
+}
+
+async function handleSaveSettings(e) {
+  e.preventDefault();
+  const form = e.target;
+  const fd = new FormData(form);
+  const settings = {};
+  for (const [k, v] of fd.entries()) settings[k] = v;
+
+  const status = document.getElementById('settings-status');
+  try {
+    await api('PUT', '/settings', { settings });
+    status.textContent = 'Saved!';
+    status.style.color = 'var(--acc)';
+    setTimeout(() => hideSettingsModal(), 1000);
+  } catch (err) {
+    status.textContent = err.message;
+    status.style.color = 'var(--error)';
+  }
+}
+
+// --- Create Modal ---
 
 function showCreateModal() {
   document.getElementById('create-modal').classList.remove('hidden');

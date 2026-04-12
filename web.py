@@ -485,6 +485,54 @@ async def list_substyles():
 
 
 
+# --- Settings API ---
+
+
+SETTINGS_KEYS = [
+    "ANTHROPIC_API_KEY",
+    "YOUTUBE_API_KEY",
+    "YOUTUBE_CHANNEL_HANDLE",
+    "ARTIST_NAME",
+    "LLM_MODE",
+]
+
+
+@app.get("/api/settings")
+async def get_settings():
+    """현재 설정값 반환 (API 키는 마스킹)"""
+    from config import _load_settings, get_setting
+
+    result = {}
+    for key in SETTINGS_KEYS:
+        val = get_setting(key, "")
+        if "KEY" in key and val:
+            result[key] = val[:8] + "..." + val[-4:] if len(val) > 12 else "****"
+        else:
+            result[key] = val
+    return result
+
+
+class SettingsRequest(BaseModel):
+    settings: dict[str, str]
+
+
+@app.put("/api/settings")
+async def save_settings(req: SettingsRequest):
+    """설정값 저장 (config/settings.json)"""
+    from config import _load_settings, _save_settings
+
+    current = _load_settings()
+    for key, val in req.settings.items():
+        if key not in SETTINGS_KEYS:
+            continue
+        # Don't overwrite with masked value
+        if "KEY" in key and val and "..." in val:
+            continue
+        current[key] = val
+    _save_settings(current)
+    return {"ok": True}
+
+
 # --- Usage API (M5) ---
 
 

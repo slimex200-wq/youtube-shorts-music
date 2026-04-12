@@ -97,11 +97,19 @@ docker compose up
 
 Open `http://localhost:8000`
 
+### Docker with demo data
+
+```bash
+docker compose up -d
+docker compose exec tuneboard python seed_demo.py
+```
+
 ### Local
 
 ```bash
 pip install -r requirements.txt
 cp .env.example .env
+python seed_demo.py              # Optional: load demo projects
 python -m uvicorn web:app --host 127.0.0.1 --port 8000
 ```
 

@@ -549,6 +549,10 @@ section{padding:32px 0}
   .hcard-thumb{width:120px;height:68px}
 }
 
+/* ── SETTINGS ── */
+.nav-settings-btn{background:none;border:1px solid var(--b2);border-radius:6px;color:var(--t3);cursor:pointer;padding:6px;display:flex;align-items:center;transition:all .15s}
+.nav-settings-btn:hover{color:var(--t1);border-color:var(--t3)}
+
 /* ── MINI PLAYER ── */
 .sgcard-play{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.7);border:1px solid rgba(255,255,255,.2);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity .2s}
 .sgcard-thumb:hover .sgcard-play,.vcard-thumb:hover .sgcard-play{opacity:1}
