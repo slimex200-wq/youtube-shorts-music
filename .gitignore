@@ -7,4 +7,5 @@ projects/
 credentials.json
 token_upload.json
 config/llm_usage.jsonl
+config/settings.json
 .omc/
