@@ -1,0 +1,11 @@
+projects/
+config/llm_usage.jsonl
+config/settings.json
+.env
+.git/
+.omc/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+static/mockup*.html

@@ -1,4 +1,6 @@
+import json
 import logging
+from pathlib import Path
 from typing import Optional
 
 from services.kb import wrap_system_prompt
@@ -12,6 +14,34 @@ from services.shranz_substyles import (
 from services.utils import parse_claude_json
 
 logger = logging.getLogger(__name__)
+
+GENRES_JSON = Path(__file__).parent.parent / "config" / "genres.json"
+
+
+def _load_genre_sections() -> str:
+    """Load genre production knowledge from config/genres.json."""
+    if not GENRES_JSON.exists():
+        return ""
+    try:
+        data = json.loads(GENRES_JSON.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return ""
+    genres = data.get("genres", {})
+    sections = []
+    for name, info in genres.items():
+        lines = [f"## {name.title()}"]
+        if info.get("bpm"):
+            lines.append(f"- BPM: {info['bpm']}")
+        if info.get("core"):
+            lines.append(f"- Core: {info['core']}")
+        if info.get("instruments"):
+            lines.append(f"- Instruments: {info['instruments']}")
+        if info.get("texture"):
+            lines.append(f"- Texture: {info['texture']}")
+        if info.get("weirdness"):
+            lines.append(f"- Weirdness: {info['weirdness']} / Style influence: {info.get('style_influence', '')}")
+        sections.append("\n".join(lines))
+    return "\n\n".join(sections)
 
 SYSTEM_PROMPT = """You are an expert music producer and Suno AI prompt engineer.
 Given a genre and options, generate a Suno-compatible prompt that produces professional-quality tracks.
@@ -46,42 +76,7 @@ Given a genre and options, generate a Suno-compatible prompt that produces profe
 
 {shranz_section}
 
-## Lo-fi Hip Hop
-- BPM: 70-90
-- Core: dusty vinyl crackle, detuned piano/Rhodes, mellow jazz samples, tape hiss, relaxed boom-bap drums
-- Instruments: Rhodes piano, jazz guitar, muted trumpet, SP-404 sampler character, vinyl noise
-- Texture: warm, analog, imperfect, cozy
-- Weirdness: 20-35 / Style influence: 55-70
-
-## Dark Trap
-- BPM: 130-150
-- Core: 808 sub bass (distorted), rapid hi-hat rolls, dark minor-key melodies, spacey reverb pads
-- Instruments: 808 bass, TR-808 hi-hats, dark synth leads, ambient pads, pitched vocal chops
-- Texture: heavy low end, spacious highs, aggressive yet atmospheric
-
-## Acid Techno
-- BPM: 135-150
-- Core: TB-303 squelching basslines (THE signature), 909 drums, resonance sweeps, hypnotic repetition
-- Instruments: Roland TB-303, TR-909, analog synths, acid resonance filters
-- Texture: wet, squelchy, psychedelic, relentless
-
-## K-Pop
-- BPM: 100-130
-- Core: polished production, layered harmonies, genre-blending (EDM drops + R&B bridges), catchy hooks
-- Instruments: layered synths, clean drums, vocal processing, bass drops
-- Texture: hyper-produced, bright, punchy, dynamic
-
-## Ambient / Chill
-- BPM: 60-90
-- Core: evolving pad textures, granular synthesis, field recordings, slow harmonic movement
-- Instruments: granular synths, reverb-drenched piano, nature samples, tape loops
-- Texture: vast, spacious, meditative, ethereal
-
-## R&B / Soul
-- BPM: 65-100
-- Core: smooth bass, lush chord voicings, intimate vocal presence, warm production
-- Instruments: Fender Rhodes, Moog bass, fingerpicked guitar, live drums with swing
-- Texture: warm, silky, analog saturation, intimate
+{genre_sections}
 
 Respond ONLY with JSON:
 {{
@@ -128,8 +123,9 @@ class SunoPromptGenerator:
         Returns:
             (system_prompt, selected_substyle_name)
         """
+        genre_sections = _load_genre_sections()
         if not is_shranz_genre(genre):
-            return SYSTEM_PROMPT.format(shranz_section=DEFAULT_SHRANZ_SECTION), None
+            return SYSTEM_PROMPT.format(shranz_section=DEFAULT_SHRANZ_SECTION, genre_sections=genre_sections), None
 
         exclude_names = []
         if self.projects_dir:
@@ -140,7 +136,7 @@ class SunoPromptGenerator:
             preferred_name=substyle_name,
         )
         section = build_substyle_prompt_section(substyle)
-        return SYSTEM_PROMPT.format(shranz_section=section), substyle.name
+        return SYSTEM_PROMPT.format(shranz_section=section, genre_sections=genre_sections), substyle.name
 
     def generate(
         self,

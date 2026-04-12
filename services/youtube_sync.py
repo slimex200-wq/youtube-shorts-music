@@ -10,7 +10,7 @@ from typing import Optional
 
 from googleapiclient.discovery import build
 
-from config import CHANNEL_HANDLE, PROJECTS_DIR
+from config import PROJECTS_DIR, get_setting
 from models.project import Project
 
 logger = logging.getLogger(__name__)
@@ -150,7 +150,7 @@ def _extract_genre_from_tags(tags: list[str]) -> str:
 
 def sync_channel(
     api_key: str = None,
-    handle: str = CHANNEL_HANDLE,
+    handle: str = None,
     max_videos: int = 200,
     base_dir: Path = None,
 ) -> dict:
@@ -158,9 +158,13 @@ def sync_channel(
 
     Returns {"synced": int, "updated": int, "skipped": int, "errors": [str]}
     """
-    key = api_key or os.environ.get("YOUTUBE_API_KEY")
+    key = api_key or get_setting("YOUTUBE_API_KEY", "")
     if not key:
-        raise RuntimeError("YOUTUBE_API_KEY not set")
+        raise RuntimeError("YOUTUBE_API_KEY not set — configure in Settings")
+
+    handle = handle or get_setting("YOUTUBE_CHANNEL_HANDLE", "")
+    if not handle:
+        raise RuntimeError("YOUTUBE_CHANNEL_HANDLE not set — configure in Settings")
 
     base = base_dir or PROJECTS_DIR
     youtube = _get_service(key)

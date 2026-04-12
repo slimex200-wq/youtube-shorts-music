@@ -1,6 +1,7 @@
 /* YouTube Shorts Music — Frontend */
 
 const API = '/api';
+const SETTINGS_BTN = '<button class="nav-settings-btn" onclick="showSettingsModal()" title="Settings"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6.5 1.5L6.8 3.1a5 5 0 011.4.6l1.3-.9 1.4 1.4-.9 1.3a5 5 0 01.6 1.4l1.6.3v2l-1.6.3a5 5 0 01-.6 1.4l.9 1.3-1.4 1.4-1.3-.9a5 5 0 01-1.4.6L9.5 14.5h-2l-.3-1.6a5 5 0 01-1.4-.6l-1.3.9-1.4-1.4.9-1.3a5 5 0 01-.6-1.4L1.5 9.5v-2l1.6-.3a5 5 0 01.6-1.4l-.9-1.3 1.4-1.4 1.3.9a5 5 0 011.4-.6L6.5 1.5z" stroke="currentColor" stroke-width="1.2"/><circle cx="8.5" cy="8.5" r="2" stroke="currentColor" stroke-width="1.2"/></svg></button>';
 let currentProject = null;
 
 // --- API helpers ---
@@ -44,6 +45,7 @@ async function loadDashboard() {
     <label class="lite-toggle"><input type="checkbox" ${isLiteMode() ? 'checked' : ''} onchange="handleLiteToggle(this.checked)"><span>Lite</span></label>
     <button class="btn btn-s" id="sync-yt-btn" onclick="handleYouTubeSync()">YouTube 동기화</button>
     <button class="btn btn-p" onclick="showCreateModal()">+ 새 프로젝트</button>
+    ${SETTINGS_BTN}
   `;
   currentProject = null;
   const list = document.getElementById('project-list');
@@ -917,7 +919,7 @@ async function openProject(id) {
 
   // nav-right gets back + lite toggle + delete
   document.getElementById('nav-right').innerHTML =
-    `<button class="btn btn-s" onclick="switchTab('shorts')">← 목록</button>${renderLiteToggle()}<button class="btn btn-s" style="color:var(--error)" onclick="deleteProject('${id}')">삭제</button>`;
+    `<button class="btn btn-s" onclick="switchTab('shorts')">← 목록</button>${renderLiteToggle()}<button class="btn btn-s" style="color:var(--error)" onclick="deleteProject('${id}')">삭제</button>${SETTINGS_BTN}`;
 
   const content = document.getElementById('step-content');
   content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
@@ -1718,7 +1720,7 @@ let editorImages = [];
 
 function showEditor() {
   document.getElementById('view-editor').classList.remove('hidden');
-  document.getElementById('nav-right').innerHTML = '';
+  document.getElementById('nav-right').innerHTML = SETTINGS_BTN;
 
   editorSongs = [];
   editorImages = [];
@@ -1834,7 +1836,7 @@ function selectModel(el, value) {
 
 async function showAnalytics() {
   document.getElementById('view-analytics').classList.remove('hidden');
-  document.getElementById('nav-right').innerHTML = '';
+  document.getElementById('nav-right').innerHTML = SETTINGS_BTN;
   const el = document.getElementById('analytics-content');
   el.innerHTML = '<div class="text-sm text-3" style="padding:40px;text-align:center">Loading...</div>';
 

@@ -1,0 +1,51 @@
+{
+  "genres": {
+    "lo-fi hip hop": {
+      "bpm": "70-90",
+      "core": "dusty vinyl crackle, detuned piano/Rhodes, mellow jazz samples, tape hiss, relaxed boom-bap drums",
+      "instruments": "Rhodes piano, jazz guitar, muted trumpet, SP-404 sampler character, vinyl noise",
+      "texture": "warm, analog, imperfect, cozy",
+      "weirdness": "20-35",
+      "style_influence": "55-70"
+    },
+    "dark trap": {
+      "bpm": "130-150",
+      "core": "808 sub bass (distorted), rapid hi-hat rolls, dark minor-key melodies, spacey reverb pads",
+      "instruments": "808 bass, TR-808 hi-hats, dark synth leads, ambient pads, pitched vocal chops",
+      "texture": "heavy low end, spacious highs, aggressive yet atmospheric"
+    },
+    "acid techno": {
+      "bpm": "135-150",
+      "core": "TB-303 squelching basslines (THE signature), 909 drums, resonance sweeps, hypnotic repetition",
+      "instruments": "Roland TB-303, TR-909, analog synths, acid resonance filters",
+      "texture": "wet, squelchy, psychedelic, relentless"
+    },
+    "k-pop": {
+      "bpm": "100-130",
+      "core": "polished production, layered harmonies, genre-blending (EDM drops + R&B bridges), catchy hooks",
+      "instruments": "layered synths, clean drums, vocal processing, bass drops",
+      "texture": "hyper-produced, bright, punchy, dynamic"
+    },
+    "ambient": {
+      "bpm": "60-90",
+      "core": "evolving pad textures, granular synthesis, field recordings, slow harmonic movement",
+      "instruments": "granular synths, reverb-drenched piano, nature samples, tape loops",
+      "texture": "vast, spacious, meditative, ethereal"
+    },
+    "r&b": {
+      "bpm": "65-100",
+      "core": "smooth bass, lush chord voicings, intimate vocal presence, warm production",
+      "instruments": "Fender Rhodes, Moog bass, fingerpicked guitar, live drums with swing",
+      "texture": "warm, silky, analog saturation, intimate"
+    }
+  },
+  "default_genre": "shranz",
+  "shranz_default": {
+    "bpm": "150-165",
+    "core": "heavily distorted kick drums, razor-sharp hi-hats, atonal synth stabs, noisy sweeps",
+    "exclude": "pop, melodic, soft, ambient, acoustic",
+    "weirdness": "60-80",
+    "style_influence": "70-85"
+  },
+  "shranz_aliases": ["shranz", "schranz", "hard techno", "hardtechno", "hard-techno", "dark shranz", "new shrantz", "new shranz"]
+}

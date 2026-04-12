@@ -1,10 +1,12 @@
 """Shranz/Schranz 서브스타일 풀.
 
-12개 서브스타일 정의, 랜덤 선택, 이전 프로젝트 중복 회피를 제공한다.
+config/substyles.json에서 로드. 랜덤 선택, 이전 프로젝트 중복 회피를 제공한다.
 """
 
+import json
 import random
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -25,7 +27,40 @@ class ShranzSubstyle:
     style_influence_range: tuple[int, int]
 
 
-SUBSTYLES: list[ShranzSubstyle] = [
+SUBSTYLES_JSON = Path(__file__).parent.parent / "config" / "substyles.json"
+
+
+def _load_substyles_from_json() -> list[ShranzSubstyle]:
+    """Load substyles from config/substyles.json."""
+    if not SUBSTYLES_JSON.exists():
+        return []
+    try:
+        data = json.loads(SUBSTYLES_JSON.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+    result = []
+    for d in data:
+        result.append(ShranzSubstyle(
+            name=d["name"],
+            label=d["label"],
+            bpm_range=tuple(d["bpm_range"]),
+            description=d.get("description", ""),
+            kick_character=d.get("kick_character", ""),
+            synths=d.get("synths", ""),
+            percussion=d.get("percussion", ""),
+            effects_chain=d.get("effects_chain", ""),
+            texture=d.get("texture", ""),
+            structure=d.get("structure", ""),
+            mood=d.get("mood", ""),
+            exclude_styles=d.get("exclude_styles", ""),
+            weirdness_range=tuple(d.get("weirdness_range", [50, 70])),
+            style_influence_range=tuple(d.get("style_influence_range", [60, 80])),
+        ))
+    return result
+
+
+SUBSTYLES: list[ShranzSubstyle] = _load_substyles_from_json() or [
+    # Fallback if JSON missing
     ShranzSubstyle(
         name="classic_german",
         label="Classic German Schranz",
@@ -222,10 +257,20 @@ SUBSTYLES: list[ShranzSubstyle] = [
 
 SUBSTYLE_MAP: dict[str, ShranzSubstyle] = {s.name: s for s in SUBSTYLES}
 
-SHRANZ_ALIASES: set[str] = {
-    "shranz", "schranz", "hard techno", "hard-techno", "hardtechno",
-    "dark shranz", "new shrantz", "new shranz",
-}
+def _load_shranz_aliases() -> set[str]:
+    """Load shranz aliases from config/genres.json."""
+    genres_json = Path(__file__).parent.parent / "config" / "genres.json"
+    if genres_json.exists():
+        try:
+            data = json.loads(genres_json.read_text(encoding="utf-8"))
+            return set(data.get("shranz_aliases", []))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {"shranz", "schranz", "hard techno", "hard-techno", "hardtechno",
+            "dark shranz", "new shrantz", "new shranz"}
+
+
+SHRANZ_ALIASES: set[str] = _load_shranz_aliases()
 
 
 def is_shranz_genre(genre: str) -> bool:

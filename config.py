@@ -32,7 +32,7 @@ def get_setting(key: str, default: str = "") -> str:
     saved = _load_settings().get(key)
     if saved:
         return saved
-    return os.getenv(key, default)
+    return os.getenv(key, "") or default
 
 
 ARTIST_NAME = get_setting("ARTIST_NAME", "Artist")
