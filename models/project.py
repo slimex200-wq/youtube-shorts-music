@@ -27,6 +27,7 @@ class Project:
     created_at: str = ""
     steps_completed: list = field(default_factory=list)
     instrumental: bool = False
+    aspect_ratio: str = "9:16"  # "9:16" = Shorts, "16:9" = Video
     style: Optional[str] = None
     lyrics: Optional[str] = None
     suno_prompt: Optional[dict] = None
@@ -69,6 +70,7 @@ class Project:
         instrumental: bool = False,
         lyrics: str = None,
         style: str = None,
+        aspect_ratio: str = "9:16",
     ) -> "Project":
         base = base_dir or PROJECTS_DIR
         now = datetime.now(timezone.utc)
@@ -79,6 +81,7 @@ class Project:
             instrumental=instrumental,
             style=style,
             lyrics=lyrics,
+            aspect_ratio=aspect_ratio,
             created_at=now.isoformat(),
             _base_dir=base,
         )

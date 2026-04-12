@@ -67,17 +67,53 @@ def _list_playlist_videos(youtube, playlist_id: str, max_results: int = 200) -> 
 
 
 def _get_video_details(youtube, video_ids: list[str]) -> list[dict]:
-    """Batch fetch video snippet + statistics."""
+    """Batch fetch video snippet + statistics + contentDetails."""
     results = []
     # API allows max 50 IDs per call
     for i in range(0, len(video_ids), 50):
         chunk = video_ids[i:i + 50]
         resp = youtube.videos().list(
             id=",".join(chunk),
-            part="snippet,statistics",
+            part="snippet,statistics,contentDetails",
         ).execute()
         results.extend(resp.get("items", []))
     return results
+
+
+def _parse_iso_duration(iso: str) -> float:
+    """Parse ISO 8601 duration (PT1M30S) to seconds."""
+    import re
+    m = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", iso or "")
+    if not m:
+        return 0.0
+    hours = int(m.group(1) or 0)
+    mins = int(m.group(2) or 0)
+    secs = int(m.group(3) or 0)
+    return hours * 3600 + mins * 60 + secs
+
+
+def _detect_aspect_ratio(video: dict) -> str:
+    """Determine 9:16 (Shorts) vs 16:9 (Video) from YouTube data.
+
+    Heuristic: duration ≤ 60s AND title/tags contain #Shorts → 9:16
+    Otherwise → 16:9
+    """
+    cd = video.get("contentDetails", {})
+    duration = _parse_iso_duration(cd.get("duration", ""))
+
+    snippet = video.get("snippet", {})
+    title = snippet.get("title", "")
+    tags = snippet.get("tags", [])
+
+    has_shorts_tag = (
+        "#shorts" in title.lower()
+        or "shorts" in title.lower()
+        or any("shorts" in t.lower() for t in tags)
+    )
+
+    if duration <= 75:
+        return "9:16"
+    return "16:9"
 
 
 def _download_thumbnail(url: str, dest: Path) -> bool:
@@ -175,10 +211,19 @@ def sync_channel(
                 "comments": int(stats.get("commentCount", 0)),
             }
 
+            aspect_ratio = _detect_aspect_ratio(v)
+            cd = v.get("contentDetails", {})
+            yt_duration = _parse_iso_duration(cd.get("duration", ""))
+
             if existing:
                 # Update stats + metadata, don't overwrite manual edits
                 existing.youtube_stats = yt_stats
                 existing.thumbnail_url = thumb_url
+                existing.aspect_ratio = aspect_ratio
+                if yt_duration and not existing.duration_sec:
+                    existing.duration_sec = yt_duration
+                if published_at and existing.youtube_video_id:
+                    existing.created_at = published_at
                 if not existing.metadata:
                     existing.metadata = {
                         "title": title,
@@ -191,7 +236,11 @@ def sync_channel(
 
             # Create new project from YouTube data
             genre = _extract_genre_from_tags(tags)
-            project = Project.create(genre=genre, base_dir=base)
+            project = Project.create(genre=genre, base_dir=base, aspect_ratio=aspect_ratio)
+            if published_at:
+                project.created_at = published_at
+            if yt_duration:
+                project.duration_sec = yt_duration
             project.youtube_video_id = vid
             project.youtube_stats = yt_stats
             project.thumbnail_url = thumb_url

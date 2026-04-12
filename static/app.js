@@ -28,6 +28,8 @@ let dashboardFilters = {
   query: '',
   moods: new Set(),
   substyle: '',
+  type: '',     // '' | 'shorts' | 'video'
+  sort: 'newest',  // 'newest' | 'oldest' | 'views' | 'genre'
 };
 let saveTimers = {}; // per-card debounce timers for notes/title_lock
 let expandedCards = new Set(); // track which cards are expanded
@@ -35,6 +37,7 @@ let expandedCards = new Set(); // track which cards are expanded
 async function loadDashboard() {
   document.getElementById('view-dashboard').classList.remove('hidden');
   document.getElementById('view-project').classList.add('hidden');
+  document.getElementById('view-higgsfield')?.classList.add('hidden');
   document.getElementById('view-editor')?.classList.add('hidden');
   // Update nav-right for dashboard
   document.getElementById('nav-right').innerHTML = `
@@ -46,7 +49,7 @@ async function loadDashboard() {
   const list = document.getElementById('project-list');
   list.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
   try {
-    dashboardProjects = (await api('GET', '/projects')).reverse();
+    dashboardProjects = await api('GET', '/projects');
     renderProjectList();
   } catch (e) {
     list.innerHTML = `<div style="text-align:center;padding:40px;color:var(--error)">${e.message}</div>`;
@@ -67,12 +70,20 @@ function handleLiteToggle(on) {
   }
 }
 
+function projectIsShorts(p) {
+  return (p.aspect_ratio || '9:16') === '9:16';
+}
+
 function filterProjects() {
   const q = dashboardFilters.query.trim().toLowerCase();
   const wantMoods = dashboardFilters.moods;
   const wantSubstyle = dashboardFilters.substyle;
+  const wantType = dashboardFilters.type;
+  const sortKey = dashboardFilters.sort;
 
-  return dashboardProjects.filter(p => {
+  const filtered = dashboardProjects.filter(p => {
+    if (wantType === 'shorts' && !projectIsShorts(p)) return false;
+    if (wantType === 'video' && projectIsShorts(p)) return false;
     if (q) {
       const hay = [
         p.id, p.genre,
@@ -97,6 +108,16 @@ function filterProjects() {
     }
     return true;
   });
+
+  filtered.sort((a, b) => {
+    if (sortKey === 'oldest') return (a.created_at || '').localeCompare(b.created_at || '');
+    if (sortKey === 'views') return ((b.youtube_stats || {}).views || 0) - ((a.youtube_stats || {}).views || 0);
+    if (sortKey === 'genre') return (a.genre || '').localeCompare(b.genre || '');
+    // newest (default)
+    return (b.created_at || '').localeCompare(a.created_at || '');
+  });
+
+  return filtered;
 }
 
 async function renderProjectList() {
@@ -114,10 +135,52 @@ async function renderProjectList() {
     return;
   }
   const filtered = filterProjects();
-  const cards = filtered.map(p => renderCard(p)).join('') || `
-    <div style="padding:40px 20px;text-align:center;color:var(--t3)">필터와 일치하는 프로젝트가 없습니다.</div>
-  `;
-  list.innerHTML = renderStatsBar() + renderFilterBar(filtered.length, dashboardProjects.length) + `<div class="card-list">${cards}</div>`;
+  const shorts = filtered.filter(p => projectIsShorts(p));
+  const videos = filtered.filter(p => !projectIsShorts(p));
+
+  const shortsHtml = shorts.length
+    ? `<div class="shorts-grid">${shorts.map(p => renderShortsGridCard(p)).join('')}</div>`
+    : (videos.length ? '' : '<div style="padding:40px 20px;text-align:center;color:var(--t3)">필터와 일치하는 프로젝트가 없습니다.</div>');
+
+  const videosHtml = videos.length
+    ? videos.map(p => renderVideoCard(p)).join('')
+    : '';
+
+  const shortsSection = shorts.length || !videos.length ? `
+    <div class="section-hdr" onclick="toggleSection('shorts-section', this)">
+      <div class="section-accent accent-shorts"></div>
+      <span class="section-hdr-label">Shorts</span>
+      <span class="section-hdr-count">${shorts.length}</span>
+      <div class="section-hdr-line"></div>
+      <span class="section-hdr-chevron">&#9662;</span>
+    </div>
+    <div id="shorts-section">${shortsHtml}</div>
+  ` : '';
+
+  const videosSection = videos.length ? `
+    <div class="section-hdr" onclick="toggleSection('videos-section', this)" style="margin-top:32px">
+      <div class="section-accent accent-video"></div>
+      <span class="section-hdr-label">Videos</span>
+      <span class="section-hdr-count">${videos.length}</span>
+      <div class="section-hdr-line"></div>
+      <span class="section-hdr-chevron">&#9662;</span>
+    </div>
+    <div id="videos-section">${videosHtml}</div>
+  ` : '';
+
+  list.innerHTML = renderStatsBar() + renderFilterBar(filtered.length, dashboardProjects.length) + shortsSection + videosSection;
+}
+
+function toggleSection(id, hdr) {
+  const el = document.getElementById(id);
+  const chevron = hdr.querySelector('.section-hdr-chevron');
+  if (el.style.display === 'none') {
+    el.style.display = '';
+    chevron.classList.remove('collapsed');
+  } else {
+    el.style.display = 'none';
+    chevron.classList.add('collapsed');
+  }
 }
 
 function renderFilterBar(matchCount, totalCount) {
@@ -127,12 +190,18 @@ function renderFilterBar(matchCount, totalCount) {
   }).join('');
 
   const substyles = collectSubstyles();
-  const substyleOptions = ['<option>전체 장르</option>']
+  const substyleOptions = ['<option value="">전체 장르</option>']
     .concat(substyles.map(s =>
       `<option value="${attr(s)}" ${dashboardFilters.substyle === s ? 'selected' : ''}>${esc(s)}</option>`
     )).join('');
 
   const hasFilter = dashboardFilters.query || dashboardFilters.moods.size || dashboardFilters.substyle;
+
+  const sortOptions = [
+    ['newest', '최신순'], ['oldest', '오래된순'], ['views', '조회수순'], ['genre', '장르순']
+  ].map(([k, l]) =>
+    `<option value="${k}" ${dashboardFilters.sort === k ? 'selected' : ''}>${l}</option>`
+  ).join('');
 
   return `
     <div class="filter-wrap">
@@ -143,6 +212,7 @@ function renderFilterBar(matchCount, totalCount) {
                  value="${attr(dashboardFilters.query)}"
                  oninput="handleDashboardSearch(this.value)">
         </div>
+        <select class="sort-select" onchange="handleSort(this.value)">${sortOptions}</select>
         <button class="filter-expand-btn" onclick="toggleFilterExpand()">
           <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><rect y="1.5" width="12" height="1.5" rx=".75" fill="currentColor"/><rect y="5.5" width="9" height="1.5" rx=".75" fill="currentColor"/><rect y="9.5" width="6" height="1.5" rx=".75" fill="currentColor"/></svg>
           필터
@@ -194,8 +264,13 @@ function handleFilterSubstyle(value) {
   renderProjectList();
 }
 
+function handleSort(value) {
+  dashboardFilters.sort = value;
+  renderProjectList();
+}
+
 function clearFilters() {
-  dashboardFilters = { query: '', moods: new Set(), substyle: '' };
+  dashboardFilters = { query: '', moods: new Set(), substyle: '', type: '', sort: 'newest' };
   renderProjectList();
 }
 
@@ -206,10 +281,13 @@ function renderStatsBar() {
   if (!total) return '';
   let totalViews = 0;
   let synced = 0;
+  let shortsCount = 0;
+  let videosCount = 0;
   const genreCounts = {};
   for (const p of dashboardProjects) {
     totalViews += (p.youtube_stats || {}).views || 0;
     if (p.youtube_video_id) synced++;
+    if (projectIsShorts(p)) shortsCount++; else videosCount++;
     const g = p.genre || 'unknown';
     genreCounts[g] = (genreCounts[g] || 0) + 1;
   }
@@ -217,11 +295,123 @@ function renderStatsBar() {
   return `
     <div class="stats-strip">
       <div class="stat-item"><span class="stat-val">${total}</span><span class="stat-lbl">프로젝트</span></div>
+      <div class="stat-item"><span class="stat-lbl">Shorts</span><span class="stat-val">${shortsCount}</span></div>
+      ${videosCount ? `<div class="stat-item"><span class="stat-lbl">Videos</span><span class="stat-val">${videosCount}</span></div>` : ''}
       ${totalViews ? `<div class="stat-item"><span class="stat-val">${totalViews.toLocaleString()}</span><span class="stat-lbl">총 조회수</span></div>` : ''}
       ${synced ? `<div class="stat-item"><span class="stat-val">${synced}</span><span class="stat-lbl">동기화</span></div>` : ''}
       ${topGenre ? `<div class="stat-item"><span class="stat-lbl">인기 장르</span><span class="stat-badge">${esc(topGenre[0])}</span></div>` : ''}
     </div>
   `;
+}
+
+// --- Shorts grid card ---
+
+function renderShortsGridCard(p) {
+  const title = p.title_lock || (p.metadata && p.metadata.title) || p.id;
+  const sp = p.suno_prompt || {};
+  const meta = p.metadata || {};
+  const stats = p.youtube_stats || {};
+  const isGold = (stats.views || 0) >= 1000;
+  const dur = p.duration_sec ? `${Math.round(p.duration_sec)}s` : '';
+
+  const thumbSrc = p.thumbnail_url
+    || ((p.visual_refs && p.visual_refs.length)
+        ? `/api/projects/${p.id}/refs/${encodeURIComponent(p.visual_refs[0])}`
+        : '');
+  const thumbHtml = thumbSrc
+    ? `<img src="${thumbSrc}" alt="" loading="lazy">`
+    : `<div class="sgcard-thumb-ph">${esc(p.genre).slice(0,6).toUpperCase()}</div>`;
+
+  const moodDots = (p.mood_tags || []).map(m => {
+    const colorMap = {crimson:'var(--crimson)',void:'var(--void)',frost:'var(--frost)',steel:'var(--steel)',ember:'var(--ember)',shadow:'var(--shadow)'};
+    return `<span class="mdot" style="background:${colorMap[m] || 'var(--acc)'}"></span>`;
+  }).join('');
+
+  const viewsText = stats.views ? Number(stats.views).toLocaleString() : '';
+
+  return `
+    <div class="sgcard ${isGold ? 'gold' : ''}" onclick="openProject('${p.id}')">
+      <div class="sgcard-thumb">
+        ${thumbHtml}
+        ${dur ? `<span class="sgcard-dur">${dur}</span>` : ''}
+        ${viewsText ? `<span class="sgcard-views ${isGold ? 'hot' : ''}">${viewsText}</span>` : ''}
+        ${moodDots ? `<div class="sgcard-moods">${moodDots}</div>` : ''}
+      </div>
+      <div class="sgcard-body">
+        <div class="sgcard-title">${esc(title)}</div>
+        ${sp.style
+          ? `<div class="sgcard-suno">${esc(sp.style)}</div>`
+          : (meta.description ? `<div class="sgcard-suno">${esc(meta.description)}</div>` : '')}
+        <div class="sgcard-meta">
+          <span class="sgcard-genre">${esc(p.genre)}</span>
+          <div class="sgcard-copy">
+            ${sp.style ? `<button class="cb" data-copy="${attr(sp.style)}" onclick="event.stopPropagation();navigator.clipboard.writeText(this.dataset.copy)">S</button>` : ''}
+            ${meta.title ? `<button class="cb" data-copy="${attr(meta.title)}" onclick="event.stopPropagation();navigator.clipboard.writeText(this.dataset.copy)">T</button>` : ''}
+            ${meta.first_comment ? `<button class="cb" data-copy="${attr(meta.first_comment)}" onclick="event.stopPropagation();navigator.clipboard.writeText(this.dataset.copy)">1</button>` : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// --- Video list card ---
+
+function renderVideoCard(p) {
+  const title = p.title_lock || (p.metadata && p.metadata.title) || p.id;
+  const sp = p.suno_prompt || {};
+  const meta = p.metadata || {};
+  const stats = p.youtube_stats || {};
+  const dur = p.duration_sec ? formatDuration(p.duration_sec) : '';
+  const sceneCount = (p.scenes || []).length;
+
+  const thumbSrc = p.thumbnail_url
+    || ((p.visual_refs && p.visual_refs.length)
+        ? `/api/projects/${p.id}/refs/${encodeURIComponent(p.visual_refs[0])}`
+        : '');
+  const thumbHtml = thumbSrc
+    ? `<img src="${thumbSrc}" alt="" loading="lazy">`
+    : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-family:var(--fm);font-size:9px;color:var(--t4)">16:9</div>`;
+
+  const moodChips = (p.mood_tags || []).map(m => {
+    const colorMap = {crimson:'var(--crimson)',void:'var(--void)',frost:'var(--frost)',steel:'var(--steel)',ember:'var(--ember)',shadow:'var(--shadow)'};
+    return `<span class="vcard-chip" style="border-color:${colorMap[m] || 'var(--b2)'};color:${colorMap[m] || 'var(--t3)'}">${esc(m)}</span>`;
+  }).join('');
+
+  const desc = meta.description || '';
+
+  return `
+    <div class="vcard" onclick="openProject('${p.id}')">
+      <div class="vcard-thumb">
+        ${thumbHtml}
+        ${dur ? `<span class="vcard-dur">${dur}</span>` : ''}
+      </div>
+      <div class="vcard-body">
+        <div class="vcard-title">${esc(title)}</div>
+        <div class="vcard-meta">
+          <code>${esc(p.genre)}</code>
+          ${sceneCount ? `<span>${sceneCount} scenes</span>` : ''}
+          <span>${p.created_at ? formatDate(p.created_at) : ''}</span>
+        </div>
+        ${sp.style ? `<div class="vcard-desc" style="color:var(--t2);font-family:var(--fm)">${esc(sp.style)}</div>` : ''}
+        ${desc ? `<div class="vcard-desc">${esc(desc)}</div>` : ''}
+        ${moodChips ? `<div class="vcard-chips">${moodChips}</div>` : ''}
+        <div class="vcard-stats">
+          <span class="vcard-stat"><strong>${stats.views ? Number(stats.views).toLocaleString() : '—'}</strong> views</span>
+          <span class="vcard-stat"><strong>${stats.likes || '—'}</strong> likes</span>
+        </div>
+      </div>
+      <div class="vcard-actions">
+        ${meta.title ? `<button class="cb" data-copy="${attr(meta.title)}" onclick="event.stopPropagation();navigator.clipboard.writeText(this.dataset.copy)">Copy Meta</button>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function formatDuration(sec) {
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 // --- Card render (collapsed / expanded) ---
@@ -269,9 +459,9 @@ function renderCollapsedCard(p) {
       ${moodDots ? `<div class="mood-dots">${moodDots}</div>` : ''}
       ${viewsText ? `<span class="views ${isGold ? 'hot' : ''}">${viewsText}</span>` : ''}
       <div class="qcopy">
-        ${sp.style ? `<button class="cb" onclick="event.stopPropagation();navigator.clipboard.writeText(${JSON.stringify(sp.style)})">Style</button>` : ''}
-        ${meta.title ? `<button class="cb" onclick="event.stopPropagation();navigator.clipboard.writeText(${JSON.stringify(meta.title)})">Title</button>` : ''}
-        ${meta.first_comment ? `<button class="cb" onclick="event.stopPropagation();navigator.clipboard.writeText(${JSON.stringify(meta.first_comment)})">1st</button>` : ''}
+        ${sp.style ? `<button class="cb" data-copy="${attr(sp.style)}" onclick="event.stopPropagation();navigator.clipboard.writeText(this.dataset.copy)">Style</button>` : ''}
+        ${meta.title ? `<button class="cb" data-copy="${attr(meta.title)}" onclick="event.stopPropagation();navigator.clipboard.writeText(this.dataset.copy)">Title</button>` : ''}
+        ${meta.first_comment ? `<button class="cb" data-copy="${attr(meta.first_comment)}" onclick="event.stopPropagation();navigator.clipboard.writeText(this.dataset.copy)">1st</button>` : ''}
       </div>
       <span class="expand-arrow">&#9662;</span>
     </div>
@@ -488,17 +678,38 @@ async function cardRegenMeta(pid) {
 async function handleYouTubeSync() {
   const btn = document.getElementById('sync-yt-btn');
   btn.disabled = true;
-  btn.textContent = 'Syncing...';
+  btn.innerHTML = '<span class="spinner"></span> 동기화 중...';
+  showToast('YouTube 채널 데이터 동기화 시작...', 'info');
   try {
     const result = await api('POST', '/sync/youtube');
-    btn.textContent = `Done (${result.synced} new, ${result.updated} updated)`;
-    setTimeout(() => { btn.textContent = 'Sync YouTube'; btn.disabled = false; }, 3000);
+    const msg = `동기화 완료 — ${result.synced}개 신규, ${result.updated}개 업데이트`;
+    showToast(msg, 'success');
+    btn.textContent = 'YouTube 동기화';
+    btn.disabled = false;
     loadDashboard();
   } catch (e) {
-    alert(e.message);
-    btn.textContent = 'Sync YouTube';
+    showToast(`동기화 실패: ${e.message}`, 'error');
+    btn.textContent = 'YouTube 동기화';
     btn.disabled = false;
   }
+}
+
+function showToast(message, type) {
+  let container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type || 'info'}`;
+  toast.textContent = message;
+  container.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('show'));
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 4000);
 }
 
 async function cardDelete(pid) {
@@ -564,10 +775,12 @@ async function handleCreate(e) {
   const fd = new FormData(form);
   const style = fd.get('style') || null;
   const substyle = fd.get('substyle') || null;
+  const aspect_ratio = fd.get('aspect_ratio') || '9:16';
   const body = {
     genre: fd.get('genre'),
     style,
     substyle,
+    aspect_ratio,
   };
 
   try {
@@ -585,7 +798,7 @@ async function handleCreate(e) {
 // --- Project View ---
 
 const STEPS = [
-  { key: 'create', label: 'Create' },
+  { key: 'create', label: 'Create', sunoOnly: true },
   { key: 'metadata', label: 'Metadata' },
   { key: 'library', label: 'Library' },
   { key: 'music', label: 'Music', fullOnly: true },
@@ -606,8 +819,13 @@ function setLiteMode(on) {
   localStorage.setItem('uiLiteMode', on ? 'true' : 'false');
 }
 
-function visibleSteps() {
-  return isLiteMode() ? STEPS.filter(s => !s.fullOnly) : STEPS;
+function visibleSteps(p) {
+  const hasSuno = p && p.suno_prompt;
+  return STEPS.filter(s => {
+    if (s.fullOnly && isLiteMode()) return false;
+    if (s.sunoOnly && !hasSuno) return false;
+    return true;
+  });
 }
 
 // Tag caches
@@ -617,11 +835,12 @@ let motifsCache = null;
 async function openProject(id) {
   document.getElementById('view-dashboard').classList.add('hidden');
   document.getElementById('view-project').classList.remove('hidden');
+  document.getElementById('view-higgsfield')?.classList.add('hidden');
   document.getElementById('view-editor')?.classList.add('hidden');
 
-  // nav-right gets lite toggle + delete; brand is static
+  // nav-right gets back + lite toggle + delete
   document.getElementById('nav-right').innerHTML =
-    `${renderLiteToggle()}<button class="btn btn-s" style="color:var(--error)" onclick="deleteProject('${id}')">삭제</button>`;
+    `<button class="btn btn-s" onclick="switchTab('shorts')">← 목록</button>${renderLiteToggle()}<button class="btn btn-s" style="color:var(--error)" onclick="deleteProject('${id}')">삭제</button>`;
 
   const content = document.getElementById('step-content');
   content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
@@ -630,6 +849,8 @@ async function openProject(id) {
 
   try {
     currentProject = await api('GET', `/projects/${id}`);
+    const topTitle = currentProject.title_lock || (currentProject.metadata && currentProject.metadata.title) || currentProject.id;
+    document.getElementById('project-topbar-title').textContent = topTitle;
     renderProject();
   } catch (err) {
     content.innerHTML = `<div style="text-align:center;padding:40px;color:var(--error)">${err.message}</div>`;
@@ -638,13 +859,14 @@ async function openProject(id) {
 
 function getActiveStep(p) {
   const lite = isLiteMode();
+  const hasSuno = !!p.suno_prompt;
   if (!lite && p.steps_completed.includes('compose')) return 'compose';
   if (!lite && p.steps_completed.includes('prompts')) return 'assets';
   if (!lite && p.steps_completed.includes('music')) return 'prompts';
   if (!lite && libraryAcknowledged && p.steps_completed.includes('create')) return 'music';
   if (metadataAcknowledged && p.steps_completed.includes('create')) return 'library';
-  if (p.steps_completed.includes('create')) return 'metadata';
-  return 'create';
+  if (p.steps_completed.includes('create')) return hasSuno ? 'metadata' : 'metadata';
+  return hasSuno ? 'create' : 'metadata';
 }
 
 function libraryHasContent(p) {
@@ -659,7 +881,7 @@ function libraryHasContent(p) {
 
 function renderSteps(activeKey, p) {
   const completed = p.steps_completed;
-  const steps = visibleSteps();
+  const steps = visibleSteps(p);
   const bar = document.getElementById('steps-bar');
   bar.innerHTML = steps.map((s, i) => {
     let done = completed.includes(s.key);
@@ -868,7 +1090,10 @@ async function renderStepLibrary(p) {
       Continue to Music →
     </button>` : '';
 
+  const sunoCard = renderSunoCard(p);
+
   el.innerHTML = `
+    ${sunoCard}
     <div class="card">
       <div class="library-section-label">VISUAL REFERENCES</div>
       <div id="refs-dropzone" class="dropzone-compact">
@@ -903,7 +1128,10 @@ async function renderStepLibrary(p) {
     </div>
 
     <div class="mt-16" style="display:flex;gap:8px">
-      <button class="btn btn-primary" onclick="saveLibrary()">Save Library</button>
+      <button class="btn btn-secondary" onclick="handleBackToMetadata()">
+        &larr; Metadata
+      </button>
+      <button class="btn btn-primary" onclick="saveLibrary(this)">Save Library</button>
       ${continueBtn}
     </div>
   `;
@@ -955,7 +1183,7 @@ async function removeMotif(tag) {
   } catch (e) { alert(e.message); }
 }
 
-async function saveLibrary() {
+async function saveLibrary(btn) {
   const notes = document.getElementById('notes-input').value;
   const titleLock = document.getElementById('title-lock-input').value.trim();
   try {
@@ -963,10 +1191,11 @@ async function saveLibrary() {
       notes,
       title_lock: titleLock,
     });
-    const btn = event.target;
-    const prev = btn.textContent;
-    btn.textContent = 'Saved';
-    setTimeout(() => { btn.textContent = prev; }, 1200);
+    if (btn) {
+      const prev = btn.textContent;
+      btn.textContent = 'Saved';
+      setTimeout(() => { btn.textContent = prev; }, 1200);
+    }
   } catch (e) { alert(e.message); }
 }
 
@@ -988,6 +1217,11 @@ async function deleteRef(fname) {
   } catch (e) { alert(e.message); }
 }
 
+function renderSunoCard(p) {
+  if (!p.suno_prompt) return '';
+  return renderSunoPrompt(p);
+}
+
 function renderStepMetadata(p) {
   if (!p.metadata) {
     return `
@@ -997,6 +1231,7 @@ function renderStepMetadata(p) {
           음악·이미지 업로드 없이 미리 확인할 수 있습니다.
         </div>
         <div style="display:flex;gap:8px;align-items:center">
+          ${p.suno_prompt ? `<button class="btn btn-secondary" onclick="handleBackToCreate()">&larr; Create</button>` : ''}
           <button class="btn btn-primary" id="gen-metadata-btn" onclick="handleGenMetadata()">
             Generate YouTube Metadata
           </button>
@@ -1010,6 +1245,7 @@ function renderStepMetadata(p) {
   return `
     ${renderMetadataCard(p.metadata)}
     <div class="mt-16" style="display:flex;gap:8px">
+      ${p.suno_prompt ? `<button class="btn btn-secondary" onclick="handleBackToCreate()">&larr; Create</button>` : ''}
       <button class="btn btn-secondary" id="regen-metadata-btn" onclick="handleGenMetadata()">
         Regenerate
       </button>
@@ -1206,6 +1442,20 @@ async function handleGenMetadata() {
   }
 }
 
+function handleBackToCreate() {
+  metadataAcknowledged = false;
+  libraryAcknowledged = false;
+  renderProject();
+}
+
+function handleBackToMetadata() {
+  libraryAcknowledged = false;
+  metadataAcknowledged = false;
+  // re-enter metadata by acknowledging nothing
+  // getActiveStep will land on metadata since create is completed
+  renderProject();
+}
+
 function handleAdvanceToLibrary() {
   metadataAcknowledged = true;
   renderProject();
@@ -1337,10 +1587,13 @@ function switchTab(tab) {
 
   document.getElementById('view-dashboard').classList.add('hidden');
   document.getElementById('view-project').classList.add('hidden');
+  document.getElementById('view-higgsfield')?.classList.add('hidden');
   document.getElementById('view-editor')?.classList.add('hidden');
 
   if (tab === 'shorts') {
     loadDashboard();
+  } else if (tab === 'higgsfield') {
+    showHiggsfield();
   } else if (tab === 'editor') {
     showEditor();
   }
@@ -1453,6 +1706,103 @@ async function loadEditorHistory() {
   } catch (_) {}
 }
 
+// --- Higgsfield ---
+
+let hfFile = null;
+
+function showHiggsfield() {
+  document.getElementById('view-higgsfield').classList.remove('hidden');
+  document.getElementById('nav-right').innerHTML = '';
+
+  hfFile = null;
+  document.getElementById('hf-preview').innerHTML = '';
+  document.getElementById('hf-output').innerHTML = '';
+  document.getElementById('hf-generate-btn').disabled = true;
+  document.getElementById('hf-status').textContent = '';
+
+  // Populate project select for context
+  const select = document.getElementById('hf-project-select');
+  select.innerHTML = '<option value="">No context</option>';
+  for (const p of dashboardProjects) {
+    const title = p.title_lock || (p.metadata && p.metadata.title) || p.id;
+    select.innerHTML += `<option value="${p.id}">${esc(title)}</option>`;
+  }
+
+  setupDropzone('hf-dropzone', (files) => {
+    const f = files[0];
+    if (!f) return;
+    hfFile = f;
+    const url = URL.createObjectURL(f);
+    document.getElementById('hf-preview').innerHTML = `<img src="${url}" alt="preview">`;
+    document.getElementById('hf-generate-btn').disabled = false;
+  });
+}
+
+async function handleHfGenerate() {
+  if (!hfFile) return;
+
+  const btn = document.getElementById('hf-generate-btn');
+  const status = document.getElementById('hf-status');
+  const output = document.getElementById('hf-output');
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Analyzing...';
+  status.textContent = 'Claude Vision + Visual KB processing...';
+  output.innerHTML = '';
+
+  const fd = new FormData();
+  fd.append('image', hfFile);
+  const pid = document.getElementById('hf-project-select').value;
+  if (pid) fd.append('pid', pid);
+
+  try {
+    const result = await api('POST', '/higgsfield/prompts', fd, true);
+    status.textContent = '';
+    renderHfPrompts(result.prompts);
+  } catch (e) {
+    status.textContent = '';
+    output.innerHTML = `<div style="padding:20px;color:var(--error)">${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Generate 4 Prompts';
+  }
+}
+
+function renderHfPrompts(prompts) {
+  const output = document.getElementById('hf-output');
+  const copyIcon = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5" stroke="currentColor" stroke-width="1.5"/></svg>';
+
+  output.innerHTML = prompts.map(p => {
+    const strength = p.motion_strength || 3;
+    const dots = Array.from({length: 5}, (_, i) =>
+      `<span class="hf-dot ${i < strength ? 'on' : ''}"></span>`
+    ).join('');
+
+    return `
+      <div class="hf-card" data-copy="${attr(p.prompt)}">
+        <div class="hf-card-head">
+          <span class="hf-card-type" data-type="${p.type}">${esc(p.label || p.type)}</span>
+          <div class="hf-card-meta">
+            <span>${esc(p.camera || '')}</span>
+            <span>${esc(p.duration || '5s')}</span>
+          </div>
+        </div>
+        <div class="hf-card-prompt">${esc(p.prompt)}</div>
+        <div class="hf-card-foot">
+          <div class="hf-strength" title="Motion Strength ${strength}">${dots}<span class="text-sm text-3" style="margin-left:4px">MS ${strength}</span></div>
+          <button class="copy-btn" onclick="copyText(this)">${copyIcon} Copy</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function selectRatio(el, value) {
+  el.closest('.form-row').querySelectorAll('.ratio-chip').forEach(c => c.classList.remove('on'));
+  el.classList.add('on');
+  el.querySelector('input').checked = true;
+}
+
 // --- Substyle ---
 
 const SHRANZ_ALIASES = ['shranz', 'schranz', 'hard techno', 'hardtechno', 'hard-techno', 'dark shranz', 'new shrantz', 'new shranz'];
@@ -1495,12 +1845,13 @@ async function updateSubstyleVisibility() {
     }
   }
 
-  if (show) {
+  if (show && !select._hintWired) {
+    select._hintWired = true;
     select.addEventListener('change', () => {
       const substyles = substyleCache || [];
       const selected = substyles.find(s => s.name === select.value);
       hint.textContent = selected ? selected.mood : '';
-    }, { once: false });
+    });
   }
 }
 
