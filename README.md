@@ -109,6 +109,26 @@ Open `http://127.0.0.1:8000`
 | Claude CLI (default) | Claude Max subscription | **$0 per call** |
 | Anthropic API | `LLM_MODE=api` + `ANTHROPIC_API_KEY` | Pay per token |
 
+## Customization
+
+Genre presets are currently tuned for **shranz/hard techno**. To adapt for your genre:
+
+| What | File | What to change |
+|------|------|---------------|
+| Genre production knowledge | `services/suno_prompt.py` | Add your genre's BPM, instruments, texture descriptions |
+| Substyle definitions | `services/shranz_substyles.py` | Replace with your own substyle variants |
+| Channel knowledge base | `config/channels/default/visual_system.md` | Rewrite with your channel's visual identity |
+| Default genre fallback | `services/youtube_sync.py` | Change `"shranz"` to your primary genre |
+
+장르 프리셋은 현재 **shranz/hard techno**에 맞춰져 있습니다. 자신의 장르에 맞게 수정하려면:
+
+| 항목 | 파일 | 변경 내용 |
+|------|------|----------|
+| 장르 프로덕션 지식 | `services/suno_prompt.py` | BPM, 악기, 텍스처 설명 추가 |
+| 서브스타일 정의 | `services/shranz_substyles.py` | 자신만의 서브스타일로 교체 |
+| 채널 비주얼 KB | `config/channels/default/visual_system.md` | 채널 비주얼 아이덴티티로 재작성 |
+| 기본 장르 | `services/youtube_sync.py` | `"shranz"`를 주력 장르로 변경 |
+
 ## Architecture
 
 ```
