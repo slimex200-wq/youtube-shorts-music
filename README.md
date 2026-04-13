@@ -86,40 +86,19 @@ Genre select → Suno prompt + Video prompt auto-generation
 
 ## Quick Start
 
-### Docker (recommended)
-
 ```bash
 git clone https://github.com/slimex200-wq/youtube-shorts-music.git
 cd youtube-shorts-music
+pip install -r requirements.txt
 cp .env.example .env   # Set YOUTUBE_API_KEY, YOUTUBE_CHANNEL_HANDLE
-docker compose up
+python -m uvicorn web:app --host 127.0.0.1 --port 8000
 ```
 
 Open `http://localhost:8000`
 
-### Docker with demo data
-
-```bash
-docker compose up -d
-docker compose exec tuneboard python seed_demo.py
-```
-
-### Local
-
-```bash
-pip install -r requirements.txt
-cp .env.example .env
-python seed_demo.py              # Optional: load demo projects
-python -m uvicorn web:app --host 127.0.0.1 --port 8000
-```
-
-### Deploy to Cloud
-
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template/tuneboard?referralCode=)
-
 ## Requirements
 
-- Docker (recommended) or Python 3.11+ with FFmpeg
+- Python 3.11+
 - Claude CLI (free on Max) or Anthropic API key
 
 ### LLM Backends
@@ -137,7 +116,7 @@ Genre presets are currently tuned for **shranz/hard techno**. To adapt for your 
 |------|------|---------------|
 | Genre production knowledge | `config/genres.json` | Add your genre's BPM, instruments, texture (no code changes) |
 | Substyle definitions | `config/substyles.json` | Replace with your own substyle variants (no code changes) |
-| Channel knowledge base | `config/channels/default/visual_system.md` | Rewrite with your channel's visual identity |
+| Channel knowledge base | `config/visual_system.md` | Rewrite with your channel's visual identity |
 | Default genre fallback | `config/genres.json` | Change `"default_genre"` to your primary genre |
 
 장르 프리셋은 현재 **shranz/hard techno**에 맞춰져 있습니다. 자신의 장르에 맞게 수정하려면:
@@ -146,13 +125,13 @@ Genre presets are currently tuned for **shranz/hard techno**. To adapt for your 
 |------|------|----------|
 | 장르 프로덕션 지식 | `config/genres.json` | BPM, 악기, 텍스처 설명 추가 (코드 수정 불필요) |
 | 서브스타일 정의 | `config/substyles.json` | 자신만의 서브스타일로 교체 (코드 수정 불필요) |
-| 채널 비주얼 KB | `config/channels/default/visual_system.md` | 채널 비주얼 아이덴티티로 재작성 |
+| 채널 비주얼 KB | `config/visual_system.md` | 채널 비주얼 아이덴티티로 재작성 |
 | 기본 장르 | `config/genres.json` | `"default_genre"`를 주력 장르로 변경 |
 
 ## Architecture
 
 ```
-web.py                  FastAPI server (19 endpoints)
+web.py                  FastAPI server
 models/project.py       JSON-based project storage
 services/
   suno_prompt.py        Suno music prompt generation
@@ -160,13 +139,12 @@ services/
   metadata.py           YouTube SEO metadata
   youtube_sync.py       YouTube Data API sync
   llm.py                LLM abstraction (CLI + API)
-  kb.py                 Channel knowledge base
+  kb.py                 Visual system knowledge base
   shranz_substyles.py   12 substyle definitions
   beat_analyzer.py      BPM + beat detection
-  composer.py           FFmpeg video pipeline
 static/
   index.html            Single-page dashboard
-  app.js                Frontend logic (~1900 lines)
+  app.js                Frontend logic
   styles.css            Industrial control panel UI
 ```
 
@@ -177,9 +155,8 @@ TuneBoard includes the following security measures:
 - **Path traversal protection** — All uploaded filenames are sanitized; directory traversal (`../`) is rejected on every upload and download endpoint.
 - **XSS mitigation** — User-facing strings (error messages, YouTube video IDs) are escaped before DOM insertion. YouTube video IDs are validated against a strict 11-character regex.
 - **API key masking** — The settings API returns only the last 2 characters of stored API keys.
-- **Non-root Docker** — The container runs as an unprivileged `appuser`, not root.
 
-> **Note:** TuneBoard is designed as a **single-user local tool**. It does not include authentication or rate limiting. If deploying to a public server, add an auth layer (e.g., reverse proxy with basic auth or API key middleware).
+> **Note:** TuneBoard is designed as a **single-user local tool**. It does not include authentication or rate limiting.
 
 ## License
 

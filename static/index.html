@@ -20,7 +20,6 @@
   <div class="nav-tabs" id="nav-tabs">
     <button class="ntab on" onclick="switchTab('shorts')">라이브러리</button>
     <button class="ntab" onclick="switchTab('analytics')">분석</button>
-    <button class="ntab" onclick="switchTab('editor')">에디터</button>
   </div>
   <div class="nav-right" id="nav-right"></div>
 </nav>
@@ -55,47 +54,6 @@
 <div id="view-analytics" class="hidden">
   <div class="main">
     <div id="analytics-content"></div>
-  </div>
-</div>
-
-<!-- Editor View -->
-<div id="view-editor" class="hidden">
-  <div class="main">
-  <section>
-    <div class="section-header">
-      <span class="section-title">Editor — Images + Music → Full Video</span>
-    </div>
-
-    <div class="editor-upload-grid">
-      <div class="editor-upload-box">
-        <div class="editor-upload-label">Songs</div>
-        <div id="editor-songs-dropzone" class="dropzone">
-          <div class="dropzone-label">Drop songs here or click</div>
-          <div class="dropzone-hint">.mp3 .wav .flac .m4a .aac .ogg</div>
-          <input type="file" accept=".mp3,.wav,.flac,.m4a,.aac,.ogg" multiple style="display:none">
-        </div>
-        <div id="editor-songs-list" class="editor-file-list"></div>
-      </div>
-      <div class="editor-upload-box">
-        <div class="editor-upload-label">Images</div>
-        <div id="editor-images-dropzone" class="dropzone">
-          <div class="dropzone-label">Drop images here or click</div>
-          <div class="dropzone-hint">.png .jpg .jpeg .webp</div>
-          <input type="file" accept=".png,.jpg,.jpeg,.webp" multiple style="display:none">
-        </div>
-        <div id="editor-images-list" class="editor-file-list"></div>
-      </div>
-    </div>
-
-    <div class="mt-16" style="display:flex;gap:8px;align-items:center">
-      <button class="btn btn-primary" id="editor-compose-btn" onclick="handleEditorCompose()" disabled>
-        Compose Videos
-      </button>
-      <span id="editor-status" class="text-sm text-3"></span>
-    </div>
-
-    <div id="editor-results" class="mt-16"></div>
-  </section>
   </div>
 </div>
 

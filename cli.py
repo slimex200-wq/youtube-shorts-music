@@ -365,42 +365,5 @@ def list_projects():
         click.echo(f"  {p.id}  [{p.status}]{bpm_str}  {p.genre}")
 
 
-@cli.command()
-@click.option("--songs", required=True, type=click.Path(exists=True), help="음악 파일 폴더")
-@click.option("--images", required=True, type=click.Path(exists=True), help="이미지 파일 폴더")
-@click.option("--output", default="./editor_output", type=click.Path(), help="출력 폴더 (기본: ./editor_output)")
-@click.option("--shuffle", is_flag=True, help="이미지 순서 랜덤")
-def editor(songs, images, output, shuffle):
-    """이미지 + 음악 → 풀 길이 비디오 (Shorts 제한 없음)"""
-    from services.editor import EditorComposer
-
-    songs_dir = Path(songs)
-    images_dir = Path(images)
-    output_dir = Path(output)
-
-    from services.editor import SUPPORTED_AUDIO_EXTS
-    from services.composer import SUPPORTED_IMAGE_EXTS
-
-    composer = EditorComposer()
-
-    song_files = composer.discover_files(songs_dir, SUPPORTED_AUDIO_EXTS)
-    image_files = composer.discover_files(images_dir, SUPPORTED_IMAGE_EXTS)
-
-    click.echo(f"[에디터] 노래 {len(song_files)}개 × 이미지 {len(image_files)}개")
-
-    try:
-        results = composer.compose_all(songs_dir, images_dir, output_dir, shuffle=shuffle)
-    except FileNotFoundError as e:
-        click.echo(f"[에러] {e}")
-        return
-    except Exception as e:
-        click.echo(f"[에러] 영상 생성 실패: {e}")
-        return
-
-    click.echo(f"\n[완료] {len(results)}개 영상 생성:")
-    for r in results:
-        click.echo(f"  {r}")
-
-
 if __name__ == "__main__":
     cli()

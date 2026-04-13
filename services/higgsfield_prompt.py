@@ -86,11 +86,9 @@ Return ONLY a JSON array with exactly 4 prompt objects. No other text."""
 class VideoPromptGenerator:
     def __init__(
         self,
-        channel: str = "default",
         llm: Optional[LLMClient] = None,
         model: str = "sonnet",
     ) -> None:
-        self.channel = channel
         self.llm = llm
         self.model = model
 
@@ -103,7 +101,7 @@ class VideoPromptGenerator:
     ) -> list[dict]:
         """Generate 4 video prompts from genre/style/mood context."""
         client = self.llm or default_client()
-        system = wrap_system_prompt(SYSTEM_PROMPT, self.channel)
+        system = wrap_system_prompt(SYSTEM_PROMPT)
 
         extras_parts = []
         if mood_tags:

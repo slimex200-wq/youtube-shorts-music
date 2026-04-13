@@ -39,7 +39,6 @@ async function loadDashboard() {
   document.getElementById('view-dashboard').classList.remove('hidden');
   document.getElementById('view-project').classList.add('hidden');
 
-  document.getElementById('view-editor')?.classList.add('hidden');
   // Update nav-right for dashboard
   document.getElementById('nav-right').innerHTML = `
     <label class="lite-toggle"><input type="checkbox" ${isLiteMode() ? 'checked' : ''} onchange="handleLiteToggle(this.checked)"><span>Lite</span></label>
@@ -918,7 +917,6 @@ async function openProject(id) {
   document.getElementById('view-dashboard').classList.add('hidden');
   document.getElementById('view-project').classList.remove('hidden');
 
-  document.getElementById('view-editor')?.classList.add('hidden');
 
   // nav-right gets back + lite toggle + delete
   document.getElementById('nav-right').innerHTML =
@@ -1705,122 +1703,11 @@ function switchTab(tab) {
   document.getElementById('view-dashboard').classList.add('hidden');
   document.getElementById('view-project').classList.add('hidden');
   document.getElementById('view-analytics')?.classList.add('hidden');
-  document.getElementById('view-editor')?.classList.add('hidden');
-
   if (tab === 'shorts') {
     loadDashboard();
   } else if (tab === 'analytics') {
     showAnalytics();
-  } else if (tab === 'editor') {
-    showEditor();
   }
-}
-
-// --- Editor ---
-
-let editorSongs = [];
-let editorImages = [];
-
-function showEditor() {
-  document.getElementById('view-editor').classList.remove('hidden');
-  document.getElementById('nav-right').innerHTML = SETTINGS_BTN;
-
-  editorSongs = [];
-  editorImages = [];
-  renderEditorFiles();
-  updateEditorBtn();
-  loadEditorHistory();
-
-  setupDropzone('editor-songs-dropzone', (files) => {
-    editorSongs.push(...files);
-    renderEditorFiles();
-    updateEditorBtn();
-  });
-  setupDropzone('editor-images-dropzone', (files) => {
-    editorImages.push(...files);
-    renderEditorFiles();
-    updateEditorBtn();
-  });
-}
-
-function renderEditorFiles() {
-  const songsList = document.getElementById('editor-songs-list');
-  const imagesList = document.getElementById('editor-images-list');
-
-  songsList.innerHTML = editorSongs.map((f, i) => `
-    <div class="editor-file-tag">
-      <span>${f.name}</span>
-      <button class="remove-btn" onclick="removeEditorFile('songs', ${i})">&times;</button>
-    </div>
-  `).join('');
-
-  imagesList.innerHTML = editorImages.map((f, i) => `
-    <div class="editor-file-tag">
-      <span>${f.name}</span>
-      <button class="remove-btn" onclick="removeEditorFile('images', ${i})">&times;</button>
-    </div>
-  `).join('');
-}
-
-function removeEditorFile(type, index) {
-  if (type === 'songs') editorSongs.splice(index, 1);
-  else editorImages.splice(index, 1);
-  renderEditorFiles();
-  updateEditorBtn();
-}
-
-function updateEditorBtn() {
-  const btn = document.getElementById('editor-compose-btn');
-  btn.disabled = editorSongs.length === 0 || editorImages.length === 0;
-}
-
-async function handleEditorCompose() {
-  const btn = document.getElementById('editor-compose-btn');
-  const status = document.getElementById('editor-status');
-
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Composing...';
-  status.textContent = `Processing ${editorSongs.length} song(s) × ${editorImages.length} image(s)...`;
-
-  const fd = new FormData();
-  for (const f of editorSongs) fd.append('songs', f);
-  for (const f of editorImages) fd.append('images', f);
-
-  try {
-    const result = await api('POST', '/editor/compose', fd, true);
-    status.textContent = '';
-    renderEditorResults(result.files);
-  } catch (err) {
-    status.textContent = '';
-    alert(err.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Compose Videos';
-  }
-}
-
-function renderEditorResults(files) {
-  const el = document.getElementById('editor-results');
-  if (!files.length) {
-    el.innerHTML = '<div class="text-sm text-3">No output.</div>';
-    return;
-  }
-  el.innerHTML = `
-    <div class="section-title mb-12">Output</div>
-    ${files.map(f => `
-      <div class="editor-result-item">
-        <span class="editor-result-name">${f}</span>
-        <a href="/api/editor/download/${f}" class="btn btn-primary btn-sm" download>Download</a>
-      </div>
-    `).join('')}
-  `;
-}
-
-async function loadEditorHistory() {
-  try {
-    const data = await api('GET', '/editor/files');
-    if (data.files.length) renderEditorResults(data.files);
-  } catch (_) {}
 }
 
 function selectRatio(el, value) {
