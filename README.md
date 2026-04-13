@@ -76,13 +76,20 @@ Genre select → Suno prompt + Video prompt auto-generation
 
 - **Content Library** — Shorts(9:16) grid + Videos(16:9) list, mood tags, motif tags, notes
 - **Suno Prompt Generator** — Genre-aware music prompts + structured lyrics ([Verse], [Chorus], etc.)
+- **Suno Workflow Panel** — Step-by-step one-click copy (Style → Description → Exclude) + "Open Suno" button
+- **Prompt Variations** — Regenerate Suno prompts with history tracking. Switch between variants anytime.
 - **Video Prompt Generator** — 4-set prompts (Zoom/Pan/Subject/Atmosphere) for Higgsfield/Kling
+- **Project Clone** — Duplicate a high-performing project's settings and regenerate prompts
 - **YouTube Sync** — Auto-pull channel metadata + stats via Data API v3
+- **YouTube First Comment** — Auto-post pinned first comment via YouTube Comments API
+- **Comment Sentiment Analysis** — Fetch comments + LLM analysis (sentiment, themes, notable quotes)
 - **Analytics** — Genre/substyle performance ranking, LLM cost tracking
-- **YouTube Metadata** — AI-generated titles, descriptions, tags, pinned comments
+- **Substyle Coverage** — Visual grid of all 12 substyles showing usage count. Batch-create projects for unused substyles.
+- **Smart Substyle Selection** — Performance-weighted auto-pick based on YouTube view stats. Unused substyles get exploration bonus.
+- **Beat Marker Export** — Download beat timestamps as SRT (for CapCut timeline markers) or JSON
 - **Preview** — Play YouTube videos directly from cards
-- **Substyle Diversity** — 12 shranz/schranz substyle auto-rotation
 - **Model Toggle** — Switch between Haiku (fast) and Sonnet per project
+- **Genre Defaults** — Auto-toggle instrumental mode per genre (shranz = instrumental, k-pop = vocals)
 
 ## Quick Start
 
@@ -131,21 +138,23 @@ Genre presets are currently tuned for **shranz/hard techno**. To adapt for your 
 ## Architecture
 
 ```
-web.py                  FastAPI server
-models/project.py       JSON-based project storage
+web.py                    FastAPI server
+models/project.py         JSON-based project storage
 services/
-  suno_prompt.py        Suno music prompt generation
-  higgsfield_prompt.py  Video prompt generation
-  metadata.py           YouTube SEO metadata
-  youtube_sync.py       YouTube Data API sync
-  llm.py                LLM abstraction (CLI + API)
-  kb.py                 Visual system knowledge base
-  shranz_substyles.py   12 substyle definitions
-  beat_analyzer.py      BPM + beat detection
+  suno_prompt.py          Suno music prompt generation (with performance-weighted substyle selection)
+  higgsfield_prompt.py    Video prompt generation (4 motion types)
+  metadata.py             YouTube SEO metadata
+  youtube_sync.py         YouTube Data API sync
+  comment_analyzer.py     YouTube comment sentiment analysis (LLM-powered)
+  uploader.py             YouTube upload + auto first-comment posting
+  llm.py                  LLM abstraction (CLI + API)
+  kb.py                   Visual system knowledge base
+  shranz_substyles.py     12 substyle definitions + smart selection
+  beat_analyzer.py        BPM + beat detection
 static/
-  index.html            Single-page dashboard
-  app.js                Frontend logic
-  styles.css            Industrial control panel UI
+  index.html              Single-page dashboard
+  app.js                  Frontend logic
+  styles.css              Industrial control panel UI
 ```
 
 ## Security
