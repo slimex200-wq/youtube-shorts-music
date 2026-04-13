@@ -1,6 +1,7 @@
 """YouTube Shorts Music -- Web API"""
 import logging
 import shutil
+import threading
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -13,6 +14,9 @@ from models.project import Project
 from services.llm import LLMError
 
 logger = logging.getLogger(__name__)
+
+# Background prompt generation tasks — key: project_id, value: status
+_bg_tasks: dict[str, str] = {}  # "running" | "done" | "error:..."
 
 
 def _safe_filename(name: str) -> str:
@@ -81,6 +85,57 @@ def _load(pid: str) -> Project:
 # --- API ---
 
 
+def _run_prompt_generation(
+    pid: str,
+    genre: str,
+    style: str | None,
+    instrumental: bool,
+    lyrics: str | None,
+    bpm: int | None = None,
+    mood: str | None = None,
+    substyle: str | None = None,
+    mood_tags: list[str] | None = None,
+    model: str = "sonnet",
+):
+    """Synchronous prompt generation — meant to run in a thread via asyncio."""
+    from services.higgsfield_prompt import VideoPromptGenerator
+    from services.suno_prompt import SunoPromptGenerator
+
+    try:
+        project = Project.load(pid)
+
+        gen = SunoPromptGenerator(projects_dir=str(PROJECTS_DIR), model=model)
+        project.suno_prompt = gen.generate(
+            genre=genre, bpm=bpm, mood=mood, lyrics=lyrics,
+            instrumental=instrumental, substyle=substyle,
+        )
+
+        vgen = VideoPromptGenerator(model=model)
+        project.video_prompts = vgen.generate(
+            genre=genre, style=style or "",
+            mood_tags=mood_tags,
+        )
+
+        project.save()
+        _bg_tasks[pid] = "done"
+    except Exception as e:
+        logger.warning("Background prompt generation failed for %s: %s", pid, e)
+        _bg_tasks[pid] = f"error:{e}"
+        try:
+            project = Project.load(pid)
+            project.set_error("prompts", str(e))
+            project.save()
+        except Exception:
+            pass
+
+
+@app.get("/api/projects/{pid}/gen-status")
+async def gen_status(pid: str):
+    """프롬프트 생성 진행 상태 조회"""
+    status = _bg_tasks.get(pid, "idle")
+    return {"status": status}
+
+
 @app.post("/api/projects")
 async def create_project(req: CreateRequest):
     project = Project.create(
@@ -88,36 +143,19 @@ async def create_project(req: CreateRequest):
         style=req.style, aspect_ratio=req.aspect_ratio,
     )
     project.update_status("created", step_name="create")
-
-    from services.suno_prompt import SunoPromptGenerator
-
-    gen = SunoPromptGenerator(projects_dir=str(PROJECTS_DIR), model=req.model)
-    try:
-        project.suno_prompt = gen.generate(
-            genre=req.genre,
-            bpm=req.bpm,
-            mood=req.mood,
-            lyrics=req.lyrics,
-            instrumental=req.instrumental,
-            substyle=req.substyle,
-        )
-    except Exception as e:
-        logger.warning("Suno prompt generation failed: %s", e)
-
-    # Video prompts (alongside Suno)
-    from services.higgsfield_prompt import VideoPromptGenerator
-
-    vgen = VideoPromptGenerator(model=req.model)
-    try:
-        project.video_prompts = vgen.generate(
-            genre=req.genre,
-            style=req.style or "",
-            mood_tags=[req.mood] if req.mood else None,
-        )
-    except Exception as e:
-        logger.warning("Video prompt generation failed: %s", e)
-
     project.save()
+
+    _bg_tasks[project.id] = "running"
+    threading.Thread(
+        target=_run_prompt_generation,
+        args=(
+            project.id, req.genre, req.style, req.instrumental, req.lyrics,
+            req.bpm, req.mood, req.substyle,
+            [req.mood] if req.mood else None, req.model,
+        ),
+        daemon=True,
+    ).start()
+
     return _serialize(project)
 
 
@@ -167,7 +205,7 @@ async def restore_suno(pid: str, index: int):
 
 @app.post("/api/projects/{pid}/clone")
 async def clone_project(pid: str):
-    """기존 프로젝트 설정을 복사하여 새 프로젝트 생성 + suno_prompt 재생성"""
+    """기존 프로젝트 설정을 복사하여 새 프로젝트 생성 + suno_prompt 백그라운드 재생성"""
     source = _load(pid)
 
     project = Project.create(
@@ -179,35 +217,20 @@ async def clone_project(pid: str):
     project.mood_tags = list(source.mood_tags)
     project.motif_tags = list(source.motif_tags)
     project.update_status("created", step_name="create")
-
-    # Regenerate suno prompt with same genre/substyle preference
-    from services.suno_prompt import SunoPromptGenerator
-
-    gen = SunoPromptGenerator(projects_dir=str(PROJECTS_DIR))
-    source_substyle = (source.suno_prompt or {}).get("substyle")
-    try:
-        project.suno_prompt = gen.generate(
-            genre=source.genre,
-            instrumental=source.instrumental,
-            substyle=source_substyle,
-        )
-    except Exception as e:
-        logger.warning("Clone suno prompt generation failed: %s", e)
-
-    # Regenerate video prompts
-    from services.higgsfield_prompt import VideoPromptGenerator
-
-    vgen = VideoPromptGenerator()
-    try:
-        project.video_prompts = vgen.generate(
-            genre=source.genre,
-            style=source.style or "",
-            mood_tags=source.mood_tags or None,
-        )
-    except Exception as e:
-        logger.warning("Clone video prompt generation failed: %s", e)
-
     project.save()
+
+    source_substyle = (source.suno_prompt or {}).get("substyle")
+    _bg_tasks[project.id] = "running"
+    threading.Thread(
+        target=_run_prompt_generation,
+        args=(
+            project.id, source.genre, source.style, source.instrumental, None,
+            None, None, source_substyle,
+            source.mood_tags or None, "sonnet",
+        ),
+        daemon=True,
+    ).start()
+
     return _serialize(project)
 
 
@@ -604,6 +627,53 @@ async def beat_markers_json(pid: str):
         "beats": beats,
         "scenes": scenes,
     }
+
+
+# --- YouTube Link API ---
+
+
+class LinkYouTubeRequest(BaseModel):
+    youtube_video_id: str
+
+
+@app.post("/api/projects/{pid}/link-youtube")
+async def link_youtube(pid: str, req: LinkYouTubeRequest):
+    """수동으로 YouTube video ID를 프로젝트에 연결"""
+    import re
+
+    vid = req.youtube_video_id.strip()
+
+    # Accept full URL or bare video ID
+    url_match = re.search(r"(?:shorts/|v=|youtu\.be/)([a-zA-Z0-9_-]{11})", vid)
+    if url_match:
+        vid = url_match.group(1)
+
+    if not re.match(r"^[a-zA-Z0-9_-]{11}$", vid):
+        raise HTTPException(400, "Invalid YouTube video ID")
+
+    # Check if another project already has this video_id
+    for p in Project.list_all():
+        if p.youtube_video_id == vid and p.id != pid:
+            raise HTTPException(
+                409,
+                f"Video already linked to project {p.id}",
+            )
+
+    project = _load(pid)
+    project.youtube_video_id = vid
+    project.save()
+    return _serialize(project)
+
+
+@app.delete("/api/projects/{pid}/link-youtube")
+async def unlink_youtube(pid: str):
+    """YouTube video ID 연결 해제"""
+    project = _load(pid)
+    project.youtube_video_id = None
+    project.youtube_stats = None
+    project.thumbnail_url = None
+    project.save()
+    return _serialize(project)
 
 
 # --- YouTube Comment API ---

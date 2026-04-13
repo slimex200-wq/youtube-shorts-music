@@ -692,7 +692,8 @@ async function handleYouTubeSync() {
   showToast('YouTube 채널 데이터 동기화 시작...', 'info');
   try {
     const result = await api('POST', '/sync/youtube');
-    const msg = `동기화 완료 — ${result.synced}개 신규, ${result.updated}개 업데이트`;
+    const linked = result.linked ? `, ${result.linked}개 자동연결` : '';
+    const msg = `동기화 완료 — ${result.synced}개 신규, ${result.updated}개 업데이트${linked}`;
     showToast(msg, 'success');
     btn.textContent = 'YouTube 동기화';
     btn.disabled = false;
@@ -1072,10 +1073,32 @@ function renderSunoHistory(p) {
   `;
 }
 
+let _genPollTimer = null;
+
 function renderStepCreate(p) {
   if (!p.suno_prompt) {
-    return `<div class="card"><div class="text-2 text-sm">Suno prompt not generated. Check API key.</div></div>`;
+    // Start polling for background generation
+    if (!_genPollTimer) {
+      _genPollTimer = setInterval(async () => {
+        if (!currentProject) { clearInterval(_genPollTimer); _genPollTimer = null; return; }
+        try {
+          const st = await api('GET', `/projects/${currentProject.id}/gen-status`);
+          if (st.status !== 'running') {
+            clearInterval(_genPollTimer);
+            _genPollTimer = null;
+            currentProject = await api('GET', `/projects/${currentProject.id}`);
+            renderProject();
+          }
+        } catch { clearInterval(_genPollTimer); _genPollTimer = null; }
+      }, 3000);
+    }
+    return `<div class="card" style="text-align:center;padding:32px">
+      <div class="spinner" style="margin:0 auto 12px"></div>
+      <div class="text-sm text-2">프롬프트 생성 중...</div>
+    </div>`;
   }
+  // Clear poll timer if prompt is ready
+  if (_genPollTimer) { clearInterval(_genPollTimer); _genPollTimer = null; }
   return renderSunoPrompt(p)
     + `<div class="mt-12"><button class="btn btn-s" id="regen-suno-btn" onclick="handleRegenSuno()">변주 생성</button></div>`
     + renderSunoHistory(p)
@@ -1415,9 +1438,20 @@ function renderStepMetadata(p) {
       </div>
     `;
   }
+  const linkSection = p.youtube_video_id
+    ? `<div class="card mt-12" style="display:flex;align-items:center;gap:8px;padding:8px 12px">
+        <span class="text-sm text-2" style="flex:1">YouTube 연결됨: <strong>${esc(p.youtube_video_id)}</strong></span>
+        <button class="btn btn-s" style="color:var(--error);font-size:11px" onclick="unlinkYouTube()">연결 해제</button>
+      </div>`
+    : `<div class="card mt-12" style="display:flex;align-items:center;gap:8px;padding:8px 12px">
+        <input id="yt-link-input" class="input" placeholder="YouTube URL 또는 Video ID 붙여넣기" style="flex:1;font-size:12px">
+        <button class="btn btn-s" onclick="linkYouTube()">연결</button>
+      </div>`;
+
   return `
     ${renderYouTubeEmbed(p)}
     ${renderMetadataCard(p.metadata)}
+    ${linkSection}
     <div class="mt-16" style="display:flex;gap:8px">
       ${p.suno_prompt ? `<button class="btn btn-secondary" onclick="handleBackToCreate()">&larr; Create</button>` : ''}
       <button class="btn btn-secondary" id="regen-metadata-btn" onclick="handleGenMetadata()">
@@ -1761,6 +1795,32 @@ async function postFirstComment() {
     showToast('댓글 게시 완료', 'success');
   } catch (err) {
     alert(err.message);
+  }
+}
+
+async function linkYouTube() {
+  if (!currentProject) return;
+  const input = document.getElementById('yt-link-input');
+  const val = (input && input.value || '').trim();
+  if (!val) return;
+  try {
+    currentProject = await api('POST', `/projects/${currentProject.id}/link-youtube`, { youtube_video_id: val });
+    showToast('YouTube 영상 연결 완료', 'success');
+    renderProject();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function unlinkYouTube() {
+  if (!currentProject) return;
+  if (!confirm('YouTube 연결을 해제할까요?')) return;
+  try {
+    currentProject = await api('DELETE', `/projects/${currentProject.id}/link-youtube`);
+    showToast('연결 해제됨', 'success');
+    renderProject();
+  } catch (err) {
+    showToast(err.message, 'error');
   }
 }
 

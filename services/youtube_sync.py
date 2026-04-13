@@ -133,6 +133,61 @@ def _find_existing_by_video_id(video_id: str, base_dir: Path = None) -> Optional
     return None
 
 
+def _normalize_title(title: str) -> str:
+    """Normalize title for fuzzy matching — lowercase, strip #shorts, hashtags, extra whitespace."""
+    import re
+    t = title.lower().strip()
+    t = re.sub(r"#\w+", "", t)          # remove hashtags
+    t = re.sub(r"[^\w\s]", " ", t)      # punctuation → space
+    t = re.sub(r"\s+", " ", t).strip()  # collapse whitespace
+    return t
+
+
+def _find_existing_by_title(
+    title: str,
+    duration_sec: float,
+    all_projects: list[Project],
+) -> Optional[Project]:
+    """Find an unlinked project whose title matches the YouTube video.
+
+    Match criteria (all must pass):
+      1. Project has NO youtube_video_id yet (unlinked)
+      2. Project has suno_prompt OR scenes (was locally created, not a bare sync stub)
+      3. Normalized title matches title_lock, metadata.title, or suno_prompt.title_suggestion
+      4. If both have duration, they're within 15 seconds
+    """
+    norm_yt = _normalize_title(title)
+    if not norm_yt:
+        return None
+
+    for p in all_projects:
+        if p.youtube_video_id:
+            continue
+        if not p.suno_prompt and not p.scenes:
+            continue
+
+        candidates = []
+        if p.title_lock:
+            candidates.append(p.title_lock)
+        if p.metadata and p.metadata.get("title"):
+            candidates.append(p.metadata["title"])
+        if p.suno_prompt and p.suno_prompt.get("title_suggestion"):
+            candidates.append(p.suno_prompt["title_suggestion"])
+
+        matched = any(_normalize_title(c) == norm_yt for c in candidates)
+        if not matched:
+            continue
+
+        # Duration sanity check — if both have duration, must be close
+        if duration_sec and p.duration_sec:
+            if abs(duration_sec - p.duration_sec) > 15:
+                continue
+
+        return p
+
+    return None
+
+
 def _extract_genre_from_tags(tags: list[str]) -> str:
     """Best-effort genre extraction from YouTube tags."""
     genre_keywords = [
@@ -185,7 +240,10 @@ def sync_channel(
     # Fetch details in batches
     videos = _get_video_details(youtube, video_ids)
 
-    result = {"synced": 0, "updated": 0, "skipped": 0, "errors": []}
+    result = {"synced": 0, "updated": 0, "linked": 0, "skipped": 0, "errors": []}
+
+    # Pre-load all projects once for title matching
+    all_projects = Project.list_all(base_dir=base)
 
     for v in videos:
         vid = v["id"]
@@ -199,6 +257,8 @@ def sync_channel(
             description = snippet.get("description", "")
             tags = snippet.get("tags", [])
             published_at = snippet.get("publishedAt", "")
+            cd = v.get("contentDetails", {})
+            yt_duration = _parse_iso_duration(cd.get("duration", ""))
 
             # Pick best thumbnail
             thumbs = snippet.get("thumbnails", {})
@@ -214,8 +274,14 @@ def sync_channel(
             }
 
             aspect_ratio = _detect_aspect_ratio(v)
-            cd = v.get("contentDetails", {})
-            yt_duration = _parse_iso_duration(cd.get("duration", ""))
+
+            # Fallback: title-based matching for manually uploaded videos
+            if not existing:
+                existing = _find_existing_by_title(title, yt_duration, all_projects)
+                if existing:
+                    existing.youtube_video_id = vid
+                    logger.info("Title-matched video %s → project %s", vid, existing.id)
+                    result["linked"] += 1
 
             if existing:
                 # Update stats + metadata, don't overwrite manual edits
