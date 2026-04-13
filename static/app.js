@@ -817,10 +817,28 @@ async function handleSaveSettings(e) {
 
 // --- Create Modal ---
 
+let genreDefaults = null;
+
+async function loadGenreDefaults() {
+  if (!genreDefaults) {
+    try { genreDefaults = await api('GET', '/genres'); } catch { genreDefaults = {}; }
+  }
+}
+
+function autoSetInstrumental(genre) {
+  if (!genreDefaults || !genre) return;
+  const g = genre.toLowerCase().trim();
+  const info = genreDefaults[g];
+  const instrumental = info ? info.default_instrumental : true;
+  const checkbox = document.querySelector('#create-form [name=instrumental]');
+  if (checkbox) checkbox.checked = instrumental;
+}
+
 function showCreateModal() {
   document.getElementById('create-modal').classList.remove('hidden');
   const genreInput = document.querySelector('#create-form [name=genre]');
   genreInput.focus();
+  loadGenreDefaults();
   // Populate genre presets
   const presetsEl = document.getElementById('genre-presets');
   if (presetsEl) {
@@ -830,12 +848,12 @@ function showCreateModal() {
     }
     const sorted = Object.entries(genres).sort((a,b) => b[1]-a[1]).slice(0, 8);
     presetsEl.innerHTML = sorted.map(([g]) =>
-      `<button type="button" class="gpchip" onclick="this.parentElement.querySelectorAll('.gpchip').forEach(c=>c.classList.remove('on'));this.classList.add('on');document.querySelector('#create-form [name=genre]').value='${esc(g)}';updateSubstyleVisibility()">${esc(g)}</button>`
+      `<button type="button" class="gpchip" onclick="this.parentElement.querySelectorAll('.gpchip').forEach(c=>c.classList.remove('on'));this.classList.add('on');document.querySelector('#create-form [name=genre]').value='${esc(g)}';updateSubstyleVisibility();autoSetInstrumental('${esc(g)}')">${esc(g)}</button>`
     ).join('');
   }
   if (!genreInput._substyleWired) {
     genreInput._substyleWired = true;
-    genreInput.addEventListener('input', updateSubstyleVisibility);
+    genreInput.addEventListener('input', () => { updateSubstyleVisibility(); autoSetInstrumental(genreInput.value); });
   }
   updateSubstyleVisibility();
 }
@@ -858,11 +876,13 @@ async function handleCreate(e) {
   const substyle = fd.get('substyle') || null;
   const aspect_ratio = fd.get('aspect_ratio') || '9:16';
   const model = fd.get('model') || 'sonnet';
+  const instrumental = !!document.querySelector('#create-form [name=instrumental]')?.checked;
   const body = {
     genre: fd.get('genre'),
     substyle,
     aspect_ratio,
     model,
+    instrumental,
   };
 
   try {
@@ -918,9 +938,9 @@ async function openProject(id) {
   document.getElementById('view-project').classList.remove('hidden');
 
 
-  // nav-right gets back + lite toggle + delete
+  // nav-right gets back + lite toggle + clone + delete
   document.getElementById('nav-right').innerHTML =
-    `<button class="btn btn-s" onclick="switchTab('shorts')">← 목록</button>${renderLiteToggle()}<button class="btn btn-s" style="color:var(--error)" onclick="deleteProject('${id}')">삭제</button>${SETTINGS_BTN}`;
+    `<button class="btn btn-s" onclick="switchTab('shorts')">← 목록</button>${renderLiteToggle()}<button class="btn btn-s" onclick="cloneProject('${id}')">복제</button><button class="btn btn-s" style="color:var(--error)" onclick="deleteProject('${id}')">삭제</button>${SETTINGS_BTN}`;
 
   const content = document.getElementById('step-content');
   content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
@@ -1084,8 +1104,17 @@ function renderSunoPrompt(p) {
     </div>
     ` : ''}
     ${renderSunoOptions(sp)}
-    <div class="text-sm text-3 mb-12 mt-16">
-      Copy the prompt above to Suno, create your track, then upload the MP3 below.
+    <div class="suno-workflow mt-16 mb-12">
+      <div class="flex-between" style="margin-bottom:8px">
+        <div class="prompt-card-title">Suno Workflow</div>
+        <a href="https://suno.com/create" target="_blank" class="btn btn-p btn-sm">Open Suno</a>
+      </div>
+      <div class="suno-wf-steps">
+        <button class="btn btn-s btn-sm suno-wf-btn" onclick="navigator.clipboard.writeText(${attr(JSON.stringify(sp.style))});this.textContent='Copied!';setTimeout(()=>this.textContent='1. Style',1000)">1. Style</button>
+        <button class="btn btn-s btn-sm suno-wf-btn" onclick="navigator.clipboard.writeText(${attr(JSON.stringify(sp.prompt))});this.textContent='Copied!';setTimeout(()=>this.textContent='2. Description',1000)">2. Description</button>
+        ${sp.lyrics ? `<button class="btn btn-s btn-sm suno-wf-btn" onclick="navigator.clipboard.writeText(${attr(JSON.stringify(sp.lyrics))});this.textContent='Copied!';setTimeout(()=>this.textContent='3. Lyrics',1000)">3. Lyrics</button>` : ''}
+        ${sp.exclude_styles ? `<button class="btn btn-s btn-sm suno-wf-btn" onclick="navigator.clipboard.writeText(${attr(JSON.stringify(sp.exclude_styles))});this.textContent='Copied!';setTimeout(()=>this.textContent='${sp.lyrics ? '4' : '3'}. Exclude',1000)">${sp.lyrics ? '4' : '3'}. Exclude</button>` : ''}
+      </div>
     </div>
   `;
 }
@@ -1634,6 +1663,16 @@ async function deleteProject(id) {
   try {
     await api('DELETE', `/projects/${id}`);
     loadDashboard();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+async function cloneProject(id) {
+  try {
+    const cloned = await api('POST', `/projects/${id}/clone`);
+    openProject(cloned.id);
+    showToast('프로젝트 복제 완료', 'success');
   } catch (err) {
     alert(err.message);
   }

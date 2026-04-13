@@ -18,6 +18,40 @@ logger = logging.getLogger(__name__)
 GENRES_JSON = Path(__file__).parent.parent / "config" / "genres.json"
 
 
+def _load_substyle_stats(projects_dir: str) -> dict[str, dict] | None:
+    """Aggregate YouTube stats per substyle from existing projects."""
+    import json as _json
+
+    result: dict[str, dict] = {}
+    projects_path = Path(projects_dir)
+    if not projects_path.exists():
+        return None
+
+    has_stats = False
+    for d in projects_path.iterdir():
+        pj = d / "project.json"
+        if not pj.exists():
+            continue
+        try:
+            data = _json.loads(pj.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue
+        sp = data.get("suno_prompt") or {}
+        substyle = sp.get("substyle")
+        if not substyle:
+            continue
+        stats = data.get("youtube_stats") or {}
+        views = stats.get("views", 0)
+        if substyle not in result:
+            result[substyle] = {"count": 0, "views": 0}
+        result[substyle]["count"] += 1
+        result[substyle]["views"] += views
+        if views > 0:
+            has_stats = True
+
+    return result if has_stats else None
+
+
 def _load_genre_sections() -> str:
     """Load genre production knowledge from config/genres.json."""
     if not GENRES_JSON.exists():
@@ -129,9 +163,13 @@ class SunoPromptGenerator:
         if self.projects_dir:
             exclude_names = get_used_substyles_from_projects(self.projects_dir)
 
+        # Load substyle performance stats for weighted selection
+        substyle_stats = _load_substyle_stats(self.projects_dir) if self.projects_dir else None
+
         substyle = pick_substyle(
             exclude_names=exclude_names,
             preferred_name=substyle_name,
+            substyle_stats=substyle_stats,
         )
         section = build_substyle_prompt_section(substyle)
         return SYSTEM_PROMPT.format(shranz_section=section, genre_sections=genre_sections), substyle.name

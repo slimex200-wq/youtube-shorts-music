@@ -282,11 +282,13 @@ def is_shranz_genre(genre: str) -> bool:
 def pick_substyle(
     exclude_names: list[str] | None = None,
     preferred_name: str | None = None,
+    substyle_stats: dict[str, dict] | None = None,
 ) -> ShranzSubstyle:
     """서브스타일 하나를 선택한다.
 
     preferred_name이 주어지면 해당 스타일 반환.
     exclude_names로 이전에 사용한 스타일을 제외할 수 있다.
+    substyle_stats가 주어지면 조회수 기반 가중치를 적용한다.
     모두 제외되면 전체 풀에서 랜덤 선택.
     """
     if preferred_name and preferred_name in SUBSTYLE_MAP:
@@ -297,6 +299,23 @@ def pick_substyle(
         pool = [s for s in SUBSTYLES if s.name not in set(exclude_names)]
         if not pool:
             pool = SUBSTYLES
+
+    # Weight by avg_views if stats available
+    if substyle_stats:
+        weights = []
+        for s in pool:
+            stats = substyle_stats.get(s.name)
+            if stats and stats.get("count", 0) > 0:
+                avg_views = stats["views"] / stats["count"]
+                weights.append(max(avg_views, 1.0))
+            else:
+                # Unseen substyles get a bonus to encourage exploration
+                max_avg = max(
+                    (st["views"] / st["count"] for st in substyle_stats.values() if st.get("count", 0) > 0),
+                    default=100.0,
+                )
+                weights.append(max_avg * 1.5)
+        return random.choices(pool, weights=weights, k=1)[0]
 
     return random.choice(pool)
 

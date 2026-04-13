@@ -120,6 +120,52 @@ async def create_project(req: CreateRequest):
     return _serialize(project)
 
 
+@app.post("/api/projects/{pid}/clone")
+async def clone_project(pid: str):
+    """기존 프로젝트 설정을 복사하여 새 프로젝트 생성 + suno_prompt 재생성"""
+    source = _load(pid)
+
+    project = Project.create(
+        genre=source.genre,
+        instrumental=source.instrumental,
+        style=source.style,
+        aspect_ratio=source.aspect_ratio,
+    )
+    project.mood_tags = list(source.mood_tags)
+    project.motif_tags = list(source.motif_tags)
+    project.update_status("created", step_name="create")
+
+    # Regenerate suno prompt with same genre/substyle preference
+    from services.suno_prompt import SunoPromptGenerator
+
+    gen = SunoPromptGenerator(projects_dir=str(PROJECTS_DIR))
+    source_substyle = (source.suno_prompt or {}).get("substyle")
+    try:
+        project.suno_prompt = gen.generate(
+            genre=source.genre,
+            instrumental=source.instrumental,
+            substyle=source_substyle,
+        )
+    except Exception as e:
+        logger.warning("Clone suno prompt generation failed: %s", e)
+
+    # Regenerate video prompts
+    from services.higgsfield_prompt import VideoPromptGenerator
+
+    vgen = VideoPromptGenerator()
+    try:
+        project.video_prompts = vgen.generate(
+            genre=source.genre,
+            style=source.style or "",
+            mood_tags=source.mood_tags or None,
+        )
+    except Exception as e:
+        logger.warning("Clone video prompt generation failed: %s", e)
+
+    project.save()
+    return _serialize(project)
+
+
 @app.get("/api/projects")
 async def list_projects():
     return [_serialize(p) for p in Project.list_all()]
@@ -461,6 +507,28 @@ async def sync_youtube():
     except Exception as e:
         raise HTTPException(500, f"YouTube sync failed: {e}")
 
+    return result
+
+
+# --- Genres API ---
+
+
+@app.get("/api/genres")
+async def get_genres():
+    """장르별 설정 반환 (default_instrumental 포함)"""
+    import json as _json
+
+    genres_path = PROJECTS_DIR.parent / "config" / "genres.json"
+    if not genres_path.exists():
+        return {}
+    data = _json.loads(genres_path.read_text(encoding="utf-8"))
+    result = {}
+    for name, info in data.get("genres", {}).items():
+        result[name] = {"default_instrumental": info.get("default_instrumental", False)}
+    # Add shranz default
+    shranz = data.get("shranz_default", {})
+    for alias in data.get("shranz_aliases", []):
+        result[alias] = {"default_instrumental": shranz.get("default_instrumental", True)}
     return result
 
 

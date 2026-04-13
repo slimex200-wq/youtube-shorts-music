@@ -398,6 +398,9 @@ section{padding:32px 0}
 .opt-item{background:var(--bg2);border:1px solid var(--b1);border-radius:var(--r);padding:10px 12px;display:flex;flex-direction:column;gap:2px}
 .opt-label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)}
 .opt-value{font-family:var(--fm);font-size:13px;color:var(--t1)}
+.suno-workflow{background:var(--bg2);border:1px solid var(--b1);border-radius:var(--r);padding:14px 16px}
+.suno-wf-steps{display:flex;gap:6px;flex-wrap:wrap}
+.suno-wf-btn{min-width:100px}
 .video-preview{width:100%;max-width:360px;margin:0 auto;display:block;border-radius:var(--rm);border:1px solid var(--b1);background:var(--bg2)}
 .ref-upload-tile{display:flex;align-items:center;justify-content:center;aspect-ratio:1;border:1.5px dashed var(--b2);border-radius:var(--r);color:var(--t3);font-size:12px;cursor:pointer;transition:all var(--tr)}
 .ref-upload-tile:hover{border-color:var(--acc);color:var(--t1)}
