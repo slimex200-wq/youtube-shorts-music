@@ -538,6 +538,74 @@ async def download_video(pid: str):
     return FileResponse(finals[0], media_type="video/mp4", filename=finals[0].name)
 
 
+# --- Beat Marker Export ---
+
+
+def _format_srt_time(seconds: float) -> str:
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    ms = int((seconds % 1) * 1000)
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
+@app.get("/api/projects/{pid}/beat-markers.srt")
+async def beat_markers_srt(pid: str):
+    """비트 타임스탬프를 SRT 자막으로 내보내기 (CapCut import용)"""
+    from fastapi.responses import Response
+
+    project = _load(pid)
+    if not project.beat_times:
+        raise HTTPException(400, "No beat data. Upload music first.")
+
+    srt_lines = []
+    marker_dur = 0.1  # each marker shows for 100ms
+
+    for i, t in enumerate(project.beat_times):
+        idx = i + 1
+        start = _format_srt_time(t)
+        end = _format_srt_time(t + marker_dur)
+        srt_lines.append(f"{idx}\n{start} --> {end}\n●  Beat {idx}\n")
+
+    # Add scene cut markers if scenes exist
+    if project.scenes:
+        for s in project.scenes:
+            idx = len(project.beat_times) + s["id"]
+            start = _format_srt_time(s["start_sec"])
+            end = _format_srt_time(s["start_sec"] + 0.5)
+            srt_lines.append(f"{idx}\n{start} --> {end}\n▶ CUT {s['id']}\n")
+
+    srt_content = "\n".join(srt_lines)
+    filename = f"{project.id}_beats.srt"
+    return Response(
+        content=srt_content,
+        media_type="text/srt",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/api/projects/{pid}/beat-markers.json")
+async def beat_markers_json(pid: str):
+    """비트 + 씬 데이터를 JSON으로 내보내기"""
+    project = _load(pid)
+    if not project.beat_times:
+        raise HTTPException(400, "No beat data. Upload music first.")
+
+    beats = [{"beat": i + 1, "time_sec": round(t, 3)} for i, t in enumerate(project.beat_times)]
+    scenes = [
+        {"scene": s["id"], "start_sec": s["start_sec"], "end_sec": s["end_sec"], "beat_count": s["beat_count"]}
+        for s in (project.scenes or [])
+    ]
+
+    return {
+        "project_id": project.id,
+        "bpm": project.bpm,
+        "duration_sec": project.duration_sec,
+        "beats": beats,
+        "scenes": scenes,
+    }
+
+
 # --- YouTube Comment API ---
 
 

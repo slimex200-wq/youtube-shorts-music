@@ -1500,9 +1500,14 @@ function renderStepPrompts(p) {
         </div>
       </div>
       ${p.duration_sec > 58 ? '<div class="text-sm mb-12" style="color:var(--warning)">Duration exceeds 58s Shorts limit</div>' : ''}
-      <button class="btn btn-primary" id="gen-prompts-btn" onclick="handleGenPrompts()">
-        Generate Scene Prompts
-      </button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" id="gen-prompts-btn" onclick="handleGenPrompts()">
+          Generate Scene Prompts
+        </button>
+        <a href="/api/projects/${p.id}/beat-markers.srt" class="btn btn-s" download>Beat Markers (SRT)</a>
+        <a href="/api/projects/${p.id}/beat-markers.json" class="btn btn-s" download="${p.id}_beats.json">Beat Data (JSON)</a>
+      </div>
+      <div class="text-sm text-3 mt-12">SRT를 CapCut에 자막으로 import하면 비트 마커로 사용할 수 있습니다.</div>
     `;
   }
   return '<div class="card text-sm text-2">Upload music first.</div>';
