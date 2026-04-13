@@ -91,6 +91,98 @@ Genre select → Suno prompt + Video prompt auto-generation
 - **Model Toggle** — Switch between Haiku (fast) and Sonnet per project
 - **Genre Defaults** — Auto-toggle instrumental mode per genre (shranz = instrumental, k-pop = vocals)
 
+---
+
+## Suno Workflow
+
+프로젝트 생성 시 Suno 프롬프트가 자동 생성되고, **Suno Workflow 패널**에서 Suno 웹사이트에 넣을 값을 순서대로 복사할 수 있습니다.
+
+1. **1. Style** 클릭 → 클립보드에 복사
+2. **2. Description** 클릭 → 클립보드에 복사
+3. **3. Exclude** 클릭 → 클립보드에 복사
+4. **Open Suno** 클릭 → suno.com/create 새 탭
+
+### Prompt Variations (변주)
+
+마음에 안 드는 프롬프트? **변주 생성** 버튼으로 새로운 변주를 만들 수 있습니다. 이전 프롬프트는 히스토리에 자동 저장되고, 언제든 **복원** 가능합니다.
+
+### Project Clone (복제)
+
+조회수 잘 나온 프로젝트의 설정(장르, substyle, mood 태그)을 그대로 가져와서 프롬프트만 새로 생성합니다. 프로젝트 상세 → **복제** 버튼.
+
+---
+
+## Smart Substyle Selection
+
+12개 shranz substyle 중 다음 곡에 쓸 스타일을 자동 선택합니다.
+
+- **YouTube 조회수 가중치**: 조회수 높은 substyle에 더 높은 확률
+- **탐색 보너스**: 아직 안 써본 substyle에 1.5배 가중치로 다양성 확보
+- YouTube Sync 후 stats가 쌓일수록 추천이 정교해집니다
+
+### Substyle Coverage & Batch
+
+Analytics 탭에서 12개 substyle 중 어떤 걸 썼고 안 썼는지 한눈에 볼 수 있습니다.
+**미사용 N개 배치 생성** 버튼으로 빈 substyle에 프로젝트를 일괄 생성합니다.
+
+---
+
+## YouTube Integration
+
+### First Comment (고정 댓글)
+
+메타데이터 생성 시 `first_comment`가 자동으로 만들어집니다.
+YouTube에 영상이 업로드된 상태라면 **게시** 버튼 한 번으로 댓글이 자동 포스팅됩니다.
+
+> OAuth `credentials.json` 필요. `youtube.force-ssl` scope 포함.
+
+### Comment Sentiment Analysis (댓글 감정 분석)
+
+YouTube에 올린 영상의 댓글을 가져와서 LLM(Haiku)으로 분석합니다.
+
+- **sentiment**: positive / mixed / negative
+- **top_themes**: 청중이 반응하는 주제 3개
+- **notable_quotes**: 인상적인 댓글
+- **summary**: 1-2문장 요약
+
+프로젝트 상세 메타데이터 스텝 → **댓글 분석** 버튼.
+
+---
+
+## Beat Marker Export (CapCut 연동)
+
+음악을 업로드하면 BPM + 비트 타임스탬프가 자동 분석됩니다.
+CapCut에서 편집할 때 비트 위치를 참고할 수 있도록 두 가지 형식으로 내보냅니다:
+
+### SRT (CapCut용)
+
+```
+1
+00:00:00,400 --> 00:00:00,500
+●  Beat 1
+
+2
+00:00:00,800 --> 00:00:00,900
+●  Beat 2
+```
+
+CapCut에서 **자막 import** → SRT 파일 선택 → 타임라인에 비트 마커 표시.
+씬 경계에는 `▶ CUT 1`, `▶ CUT 2` 마커도 포함됩니다.
+
+### JSON (자동화용)
+
+```json
+{
+  "bpm": 155,
+  "beats": [{"beat": 1, "time_sec": 0.4}, ...],
+  "scenes": [{"scene": 1, "start_sec": 0, "end_sec": 8.2}, ...]
+}
+```
+
+Prompts 스텝에서 **Beat Markers (SRT)** / **Beat Data (JSON)** 다운로드.
+
+---
+
 ## Quick Start
 
 ```bash
