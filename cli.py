@@ -27,29 +27,23 @@ def create(genre, style, instrumental, lyrics, bpm, mood, artist, substyle):
     project = Project.create(genre=genre, instrumental=instrumental, lyrics=lyrics, style=style)
     project.update_status("created", step_name="create")
 
-    from config import Config
-    cfg = Config.from_env()
-
-    if cfg.anthropic_api_key:
-        from services.suno_prompt import SunoPromptGenerator
-        gen = SunoPromptGenerator(cfg.anthropic_api_key, projects_dir=str(PROJECTS_DIR))
-        click.echo(f"[Suno 프롬프트 생성] {genre}...")
-        try:
-            suno_prompt = gen.generate(
-                genre=genre, bpm=bpm, mood=mood,
-                lyrics=lyrics, instrumental=instrumental,
-                substyle=substyle,
-            )
-            project.suno_prompt = suno_prompt
-            click.echo(f"[Style] {suno_prompt['style']}")
-            click.echo(f"[제목 제안] {suno_prompt.get('title_suggestion', '-')}")
-            click.echo(f"[BPM 제안] {suno_prompt.get('bpm_suggestion', '-')}")
-            if suno_prompt.get("substyle"):
-                click.echo(f"[서브스타일] {suno_prompt['substyle']}")
-        except Exception as e:
-            click.echo(f"[경고] Suno 프롬프트 생성 실패: {e}")
-    else:
-        click.echo("[스킵] ANTHROPIC_API_KEY 없음 — Suno 프롬프트 생성 스킵")
+    from services.suno_prompt import SunoPromptGenerator
+    gen = SunoPromptGenerator(projects_dir=str(PROJECTS_DIR))
+    click.echo(f"[Suno 프롬프트 생성] {genre}...")
+    try:
+        suno_prompt = gen.generate(
+            genre=genre, bpm=bpm, mood=mood,
+            lyrics=lyrics, instrumental=instrumental,
+            substyle=substyle,
+        )
+        project.suno_prompt = suno_prompt
+        click.echo(f"[Style] {suno_prompt['style']}")
+        click.echo(f"[제목 제안] {suno_prompt.get('title_suggestion', '-')}")
+        click.echo(f"[BPM 제안] {suno_prompt.get('bpm_suggestion', '-')}")
+        if suno_prompt.get("substyle"):
+            click.echo(f"[서브스타일] {suno_prompt['substyle']}")
+    except Exception as e:
+        click.echo(f"[경고] Suno 프롬프트 생성 실패: {e}")
 
     if artist:
         project.config["title_card"]["artist_name"] = artist
@@ -124,13 +118,7 @@ def music(project_id, music_path, beats_per_scene):
 @click.argument("project_id")
 def prompts(project_id):
     """씬별 이미지/영상 프롬프트 생성"""
-    from config import Config
     from services.prompt_generator import PromptGenerator
-
-    cfg = Config.from_env()
-    if not cfg.anthropic_api_key:
-        click.echo("[에러] ANTHROPIC_API_KEY가 설정되지 않았습니다.")
-        return
 
     try:
         project = Project.load(project_id)
@@ -142,7 +130,7 @@ def prompts(project_id):
         click.echo("[에러] 씬이 없습니다. 먼저 music 명령을 실행하세요.")
         return
 
-    gen = PromptGenerator(cfg.anthropic_api_key)
+    gen = PromptGenerator()
     click.echo(f"[프롬프트 생성] {len(project.scenes)}개 씬...")
 
     try:
@@ -228,11 +216,9 @@ def compose(project_id, bounce):
         click.echo(f"[에러] 영상 조립 실패: {e}")
         return
 
-    from config import Config
-    cfg = Config.from_env()
-    if cfg.anthropic_api_key and not project.metadata:
+    if not project.metadata:
         from services.metadata import MetadataGenerator
-        meta_gen = MetadataGenerator(cfg.anthropic_api_key)
+        meta_gen = MetadataGenerator()
         try:
             project.metadata = meta_gen.generate(
                 genre=project.genre,

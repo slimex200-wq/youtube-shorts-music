@@ -170,6 +170,17 @@ static/
   styles.css            Industrial control panel UI
 ```
 
+## Security
+
+TuneBoard includes the following security measures:
+
+- **Path traversal protection** — All uploaded filenames are sanitized; directory traversal (`../`) is rejected on every upload and download endpoint.
+- **XSS mitigation** — User-facing strings (error messages, YouTube video IDs) are escaped before DOM insertion. YouTube video IDs are validated against a strict 11-character regex.
+- **API key masking** — The settings API returns only the last 2 characters of stored API keys.
+- **Non-root Docker** — The container runs as an unprivileged `appuser`, not root.
+
+> **Note:** TuneBoard is designed as a **single-user local tool**. It does not include authentication or rate limiting. If deploying to a public server, add an auth layer (e.g., reverse proxy with basic auth or API key middleware).
+
 ## License
 
 MIT

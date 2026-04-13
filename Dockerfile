@@ -13,6 +13,9 @@ COPY . .
 
 RUN mkdir -p projects config
 
+RUN useradd -m -s /bin/bash appuser && chown -R appuser:appuser /app
+USER appuser
+
 EXPOSE 8000
 
 CMD ["uvicorn", "web:app", "--host", "0.0.0.0", "--port", "8000"]

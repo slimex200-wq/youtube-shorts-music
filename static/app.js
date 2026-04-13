@@ -54,7 +54,7 @@ async function loadDashboard() {
     dashboardProjects = await api('GET', '/projects');
     renderProjectList();
   } catch (e) {
-    list.innerHTML = `<div style="text-align:center;padding:40px;color:var(--error)">${e.message}</div>`;
+    list.innerHTML = `<div style="text-align:center;padding:40px;color:var(--error)">${esc(e.message)}</div>`;
   }
 }
 
@@ -345,7 +345,7 @@ function renderShortsGridCard(p) {
         ${dur ? `<span class="sgcard-dur">${dur}</span>` : ''}
         ${viewsText ? `<span class="sgcard-views ${isGold ? 'hot' : ''}">${viewsText}</span>` : ''}
         ${moodDots ? `<div class="sgcard-moods">${moodDots}</div>` : ''}
-        ${p.youtube_video_id ? `<button class="sgcard-play" onclick="event.stopPropagation();showMiniPlayer('${p.youtube_video_id}',true)" title="Preview"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg></button>` : ''}
+        ${p.youtube_video_id ? `<button class="sgcard-play" onclick="event.stopPropagation();showMiniPlayer('${attr(p.youtube_video_id)}',true)" title="Preview"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg></button>` : ''}
       </div>
       <div class="sgcard-body">
         <div class="sgcard-title">${esc(title)}</div>
@@ -395,7 +395,7 @@ function renderVideoCard(p) {
       <div class="vcard-thumb">
         ${thumbHtml}
         ${dur ? `<span class="vcard-dur">${dur}</span>` : ''}
-        ${p.youtube_video_id ? `<button class="sgcard-play" onclick="event.stopPropagation();showMiniPlayer('${p.youtube_video_id}',false)" title="Preview"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg></button>` : ''}
+        ${p.youtube_video_id ? `<button class="sgcard-play" onclick="event.stopPropagation();showMiniPlayer('${attr(p.youtube_video_id)}',false)" title="Preview"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg></button>` : ''}
       </div>
       <div class="vcard-body">
         <div class="vcard-title">${esc(title)}</div>
@@ -724,6 +724,9 @@ function showToast(message, type) {
 }
 
 function showMiniPlayer(videoId, isShorts) {
+  // Validate YouTube video ID format (11 alphanumeric + hyphen + underscore)
+  if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) return;
+
   const existing = document.getElementById('mini-player-overlay');
   if (existing) existing.remove();
 
@@ -739,7 +742,7 @@ function showMiniPlayer(videoId, isShorts) {
       <button class="mini-player-close" onclick="this.closest('.mini-player-overlay').remove()">&times;</button>
       <iframe
         width="${w}" height="${h}"
-        src="https://www.youtube.com/embed/${videoId}?autoplay=1"
+        src="https://www.youtube.com/embed/${encodeURIComponent(videoId)}?autoplay=1"
         frameborder="0"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowfullscreen
@@ -932,7 +935,7 @@ async function openProject(id) {
     document.getElementById('project-topbar-title').textContent = topTitle;
     renderProject();
   } catch (err) {
-    content.innerHTML = `<div style="text-align:center;padding:40px;color:var(--error)">${err.message}</div>`;
+    content.innerHTML = `<div style="text-align:center;padding:40px;color:var(--error)">${esc(err.message)}</div>`;
   }
 }
 
@@ -1516,7 +1519,7 @@ async function handleMusicUpload(file) {
     currentProject = await api('POST', `/projects/${currentProject.id}/music`, fd, true);
     renderProject();
   } catch (err) {
-    content.innerHTML = `<div class="empty-state" style="color:var(--error)">${err.message}</div>`;
+    content.innerHTML = `<div class="empty-state" style="color:var(--error)">${esc(err.message)}</div>`;
   }
 }
 

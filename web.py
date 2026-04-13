@@ -14,6 +14,14 @@ from services.llm import LLMError
 
 logger = logging.getLogger(__name__)
 
+
+def _safe_filename(name: str) -> str:
+    """Strip directory components and reject path traversal attempts."""
+    clean = Path(name).name
+    if not clean or ".." in clean or clean.startswith("."):
+        raise HTTPException(400, "Invalid filename")
+    return clean
+
 app = FastAPI(title="YouTube Shorts Music")
 
 
@@ -61,10 +69,12 @@ def _serialize(p: Project) -> dict:
 
 
 def _load(pid: str) -> Project:
+    if ".." in pid or "/" in pid or "\\" in pid:
+        raise HTTPException(400, "Invalid project ID")
     try:
         return Project.load(pid)
     except FileNotFoundError:
-        raise HTTPException(404, f"Project not found: {pid}")
+        raise HTTPException(404, "Project not found")
 
 
 # --- API ---
@@ -161,11 +171,12 @@ async def upload_refs(pid: str, files: list[UploadFile] = File(...)):
         suffix = Path(f.filename).suffix.lower()
         if suffix not in REF_EXTS:
             continue
-        dst = refs_dir / f.filename
+        safe_name = _safe_filename(f.filename)
+        dst = refs_dir / safe_name
         # Avoid name collision
         n = 1
         while dst.exists():
-            dst = refs_dir / f"{Path(f.filename).stem}_{n}{suffix}"
+            dst = refs_dir / f"{Path(safe_name).stem}_{n}{suffix}"
             n += 1
         with open(dst, "wb") as out:
             shutil.copyfileobj(f.file, out)
@@ -206,10 +217,10 @@ async def delete_project(pid: str):
         shutil.rmtree(p.project_dir)
     except PermissionError:
         # Windows: 열린 파일이 있으면 재시도
+        import asyncio
         import gc
-        import time
         gc.collect()
-        time.sleep(0.5)
+        await asyncio.sleep(0.5)
         shutil.rmtree(p.project_dir, ignore_errors=True)
     return {"ok": True}
 
@@ -220,11 +231,14 @@ async def upload_music(pid: str, file: UploadFile = File(...)):
 
     project = _load(pid)
 
-    dst = project.project_dir / "music" / file.filename
+    music_dir = project.project_dir / "music"
+    music_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = _safe_filename(file.filename)
+    dst = music_dir / safe_name
     with open(dst, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    project.music_file = file.filename
+    project.music_file = safe_name
 
     analyzer = BeatAnalyzer()
     try:
@@ -373,12 +387,26 @@ async def compose_video(pid: str, req: ComposeRequest | None = None):
     bounce = req.bounce if req else False
     composer = ShortsComposer()
     fade_out = project.config.get("fade_out_sec", 0.0)
+
+    # Determine title: title_lock > metadata > suno_prompt > genre
+    title = None
+    if project.title_lock:
+        title = project.title_lock
+    elif project.metadata:
+        title = project.metadata.get("title")
+    if not title and project.suno_prompt:
+        title = project.suno_prompt.get("title_suggestion")
+    if not title:
+        title = project.genre
+
     try:
         composer.compose_full(
             project_dir=project.project_dir,
             scenes=project.scenes,
             music_file=project.music_file,
             fade_out_sec=fade_out,
+            title=title,
+            title_card_config=project.config.get("title_card"),
             bounce=bounce,
         )
     except FileNotFoundError as e:
@@ -506,7 +534,7 @@ async def get_settings():
     for key in SETTINGS_KEYS:
         val = get_setting(key, "")
         if "KEY" in key and val:
-            result[key] = val[:8] + "..." + val[-4:] if len(val) > 12 else "****"
+            result[key] = "****..." + val[-2:] if len(val) > 4 else "****"
         else:
             result[key] = val
     return result
@@ -530,6 +558,11 @@ async def save_settings(req: SettingsRequest):
             continue
         current[key] = val
     _save_settings(current)
+
+    # Reset cached LLM client so new keys/mode take effect
+    from services.llm import reset_default_client
+    reset_default_client()
+
     return {"ok": True}
 
 
@@ -668,12 +701,12 @@ async def editor_compose(
         output_dir.mkdir()
 
         for f in songs:
-            dst = songs_dir / f.filename
+            dst = songs_dir / _safe_filename(f.filename)
             with open(dst, "wb") as out:
                 shutil.copyfileobj(f.file, out)
 
         for f in images:
-            dst = images_dir / f.filename
+            dst = images_dir / _safe_filename(f.filename)
             with open(dst, "wb") as out:
                 shutil.copyfileobj(f.file, out)
 
@@ -701,10 +734,11 @@ async def editor_compose(
 
 @app.get("/api/editor/download/{filename}")
 async def editor_download(filename: str):
-    filepath = PROJECTS_DIR / "_editor_output" / filename
+    safe_name = _safe_filename(filename)
+    filepath = PROJECTS_DIR / "_editor_output" / safe_name
     if not filepath.exists():
         raise HTTPException(404, "File not found")
-    return FileResponse(filepath, media_type="video/mp4", filename=filename)
+    return FileResponse(filepath, media_type="video/mp4", filename=safe_name)
 
 
 @app.get("/api/editor/files")
