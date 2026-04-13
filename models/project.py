@@ -31,6 +31,7 @@ class Project:
     style: Optional[str] = None
     lyrics: Optional[str] = None
     suno_prompt: Optional[dict] = None
+    suno_prompt_history: list = field(default_factory=list)
     video_prompts: Optional[list] = None
     music_file: Optional[str] = None
     bpm: Optional[float] = None

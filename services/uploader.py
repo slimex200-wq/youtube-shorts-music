@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.readonly",
     "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.force-ssl",
 ]
 
 
@@ -85,4 +86,24 @@ class YouTubeUploader:
 
         video_id = response["id"]
         logger.info("업로드 완료: https://youtube.com/watch?v=%s", video_id)
+        return response
+
+    def post_comment(self, video_id: str, text: str) -> dict:
+        """Post a comment on a video. Returns the comment resource."""
+        youtube = self._get_service()
+        body = {
+            "snippet": {
+                "videoId": video_id,
+                "topLevelComment": {
+                    "snippet": {
+                        "textOriginal": text,
+                    }
+                }
+            }
+        }
+        response = youtube.commentThreads().insert(
+            part="snippet", body=body,
+        ).execute()
+        comment_id = response["id"]
+        logger.info("댓글 게시 완료: %s on %s", comment_id, video_id)
         return response

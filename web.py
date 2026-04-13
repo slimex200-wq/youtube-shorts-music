@@ -48,6 +48,7 @@ def _serialize(p: Project) -> dict:
         "instrumental": p.instrumental,
         "lyrics": p.lyrics,
         "suno_prompt": p.suno_prompt,
+        "suno_prompt_history": p.suno_prompt_history,
         "video_prompts": p.video_prompts,
         "music_file": p.music_file,
         "bpm": p.bpm,
@@ -116,6 +117,50 @@ async def create_project(req: CreateRequest):
     except Exception as e:
         logger.warning("Video prompt generation failed: %s", e)
 
+    project.save()
+    return _serialize(project)
+
+
+@app.post("/api/projects/{pid}/regenerate-suno")
+async def regenerate_suno(pid: str):
+    """현재 suno_prompt를 히스토리에 저장하고 변주 재생성"""
+    project = _load(pid)
+
+    # Save current to history
+    if project.suno_prompt:
+        project.suno_prompt_history.append(project.suno_prompt)
+
+    from services.suno_prompt import SunoPromptGenerator
+
+    gen = SunoPromptGenerator(projects_dir=str(PROJECTS_DIR))
+    substyle = (project.suno_prompt or {}).get("substyle")
+    try:
+        project.suno_prompt = gen.generate(
+            genre=project.genre,
+            instrumental=project.instrumental,
+            lyrics=project.lyrics,
+            substyle=substyle,
+        )
+    except LLMError as e:
+        raise HTTPException(503, f"LLM backend unavailable: {e}")
+    except Exception as e:
+        raise HTTPException(500, f"Suno regeneration failed: {e}")
+
+    project.save()
+    return _serialize(project)
+
+
+@app.post("/api/projects/{pid}/restore-suno/{index}")
+async def restore_suno(pid: str, index: int):
+    """히스토리에서 이전 suno_prompt를 복원"""
+    project = _load(pid)
+    if index < 0 or index >= len(project.suno_prompt_history):
+        raise HTTPException(400, "Invalid history index")
+
+    # Swap current and selected
+    if project.suno_prompt:
+        project.suno_prompt_history.append(project.suno_prompt)
+    project.suno_prompt = project.suno_prompt_history.pop(index)
     project.save()
     return _serialize(project)
 
@@ -493,6 +538,69 @@ async def download_video(pid: str):
     return FileResponse(finals[0], media_type="video/mp4", filename=finals[0].name)
 
 
+# --- YouTube Comment API ---
+
+
+@app.post("/api/projects/{pid}/comment")
+async def post_first_comment(pid: str):
+    """Post the first_comment from metadata as a comment on the YouTube video."""
+    project = _load(pid)
+    if not project.youtube_video_id:
+        raise HTTPException(400, "No YouTube video linked to this project")
+    if not project.metadata or not project.metadata.get("first_comment"):
+        raise HTTPException(400, "No first_comment in metadata")
+
+    from services.uploader import YouTubeUploader
+
+    uploader = YouTubeUploader()
+    try:
+        result = uploader.post_comment(
+            video_id=project.youtube_video_id,
+            text=project.metadata["first_comment"],
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Comment posting failed: {e}")
+
+    return {"ok": True, "comment_id": result.get("id")}
+
+
+# --- YouTube Comment Analysis ---
+
+
+@app.get("/api/projects/{pid}/comments")
+async def analyze_project_comments(pid: str):
+    """Fetch and analyze YouTube comments for a project."""
+    project = _load(pid)
+    if not project.youtube_video_id:
+        raise HTTPException(400, "No YouTube video linked")
+
+    from services.comment_analyzer import analyze_comments, fetch_comments
+
+    try:
+        comments = fetch_comments(project.youtube_video_id)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Comment fetch failed: {e}")
+
+    if not comments:
+        return {"comment_count": 0, "analysis": None}
+
+    substyle = (project.suno_prompt or {}).get("substyle")
+    try:
+        analysis = analyze_comments(
+            comments=comments,
+            genre=project.genre,
+            substyle=substyle,
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Comment analysis failed: {e}")
+
+    return {"comment_count": len(comments), "analysis": analysis}
+
+
 # --- YouTube Sync API ---
 
 
@@ -579,6 +687,40 @@ async def list_substyles():
         for s in SUBSTYLES
     ]
 
+
+class BatchRequest(BaseModel):
+    substyles: list[str]
+
+
+@app.post("/api/projects/batch")
+async def batch_create(req: BatchRequest):
+    """빈 substyle에서 배치 프로젝트 생성"""
+    from services.suno_prompt import SunoPromptGenerator
+    from services.higgsfield_prompt import VideoPromptGenerator
+
+    created = []
+    for substyle_name in req.substyles:
+        project = Project.create(genre="shranz", instrumental=True, aspect_ratio="9:16")
+        project.update_status("created", step_name="create")
+
+        gen = SunoPromptGenerator(projects_dir=str(PROJECTS_DIR))
+        try:
+            project.suno_prompt = gen.generate(
+                genre="shranz", instrumental=True, substyle=substyle_name,
+            )
+        except Exception as e:
+            logger.warning("Batch suno prompt failed for %s: %s", substyle_name, e)
+
+        vgen = VideoPromptGenerator()
+        try:
+            project.video_prompts = vgen.generate(genre="shranz", style="")
+        except Exception as e:
+            logger.warning("Batch video prompt failed: %s", e)
+
+        project.save()
+        created.append({"id": project.id, "substyle": substyle_name})
+
+    return {"created": created}
 
 
 # --- Settings API ---

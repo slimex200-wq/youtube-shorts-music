@@ -1029,11 +1029,57 @@ function renderProject() {
 
 // --- Step: Create (Suno prompt) ---
 
+async function handleRegenSuno() {
+  if (!currentProject) return;
+  const btn = document.getElementById('regen-suno-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Generating...';
+  try {
+    currentProject = await api('POST', `/projects/${currentProject.id}/regenerate-suno`);
+    renderProject();
+    showToast('새 변주 생성 완료', 'success');
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '변주 생성';
+  }
+}
+
+async function restoreSuno(index) {
+  if (!currentProject) return;
+  try {
+    currentProject = await api('POST', `/projects/${currentProject.id}/restore-suno/${index}`);
+    renderProject();
+    showToast('이전 프롬프트 복원', 'success');
+  } catch (err) { alert(err.message); }
+}
+
+function renderSunoHistory(p) {
+  const history = p.suno_prompt_history || [];
+  if (!history.length) return '';
+  return `
+    <div class="suno-history mt-12">
+      <div class="prompt-card-title" style="margin-bottom:8px">History (${history.length})</div>
+      ${history.map((h, i) => `
+        <div class="suno-hist-item">
+          <span class="text-sm text-2">${esc(h.title_suggestion || h.substyle || 'variant ' + (i+1))}</span>
+          <span class="text-sm text-3" style="flex:1;margin-left:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc((h.style || '').slice(0, 60))}</span>
+          <button class="btn btn-s btn-sm" onclick="restoreSuno(${i})">복원</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
 function renderStepCreate(p) {
   if (!p.suno_prompt) {
     return `<div class="card"><div class="text-2 text-sm">Suno prompt not generated. Check API key.</div></div>`;
   }
-  return renderSunoPrompt(p) + renderVideoPrompts(p);
+  return renderSunoPrompt(p)
+    + `<div class="mt-12"><button class="btn btn-s" id="regen-suno-btn" onclick="handleRegenSuno()">변주 생성</button></div>`
+    + renderSunoHistory(p)
+    + renderVideoPrompts(p);
 }
 
 function renderVideoPrompts(p) {
@@ -1163,7 +1209,10 @@ function renderMetadataCard(meta) {
     <div class="card mt-12" data-copy="${attr(firstComment)}">
       <div class="flex-between">
         <div class="text-sm text-3" style="margin-bottom:4px">PINNED FIRST COMMENT</div>
-        <button class="copy-btn" onclick="copyText(this)">Copy</button>
+        <div style="display:flex;gap:4px">
+          ${currentProject && currentProject.youtube_video_id ? `<button class="btn btn-p btn-sm" onclick="postFirstComment()">게시</button>` : ''}
+          <button class="copy-btn" onclick="copyText(this)">Copy</button>
+        </div>
       </div>
       <div class="text-sm text-2" style="white-space:pre-line">${esc(firstComment)}</div>
     </div>
@@ -1377,8 +1426,39 @@ function renderStepMetadata(p) {
       <button class="btn btn-primary" onclick="handleAdvanceToLibrary()">
         Next: Library &rarr;
       </button>
+      ${p.youtube_video_id ? `<button class="btn btn-s" onclick="analyzeComments()">댓글 분석</button>` : ''}
     </div>
+    <div id="comment-analysis"></div>
   `;
+}
+
+async function analyzeComments() {
+  if (!currentProject) return;
+  const el = document.getElementById('comment-analysis');
+  el.innerHTML = '<div class="loading-overlay" style="padding:20px"><div class="spinner"></div> 댓글 분석 중...</div>';
+  try {
+    const data = await api('GET', `/projects/${currentProject.id}/comments`);
+    if (!data.analysis) {
+      el.innerHTML = '<div class="card mt-12 text-sm text-3">댓글이 없습니다.</div>';
+      return;
+    }
+    const a = data.analysis;
+    const themes = (a.top_themes || []).map(t => `<span class="cov-cell used" style="padding:4px 8px;font-size:11px">${esc(t)}</span>`).join('');
+    const quotes = (a.notable_quotes || []).map(q => `<div class="text-sm text-2" style="padding:4px 0;border-bottom:1px solid var(--b1)">"${esc(q)}"</div>`).join('');
+    el.innerHTML = `
+      <div class="card mt-12">
+        <div class="flex-between" style="margin-bottom:8px">
+          <div class="prompt-card-title">Comment Analysis (${data.comment_count} comments)</div>
+          <span class="badge badge-${a.sentiment === 'positive' ? 'composed' : a.sentiment === 'negative' ? 'created' : 'music'}">${esc(a.sentiment)}</span>
+        </div>
+        <div class="text-sm text-2 mb-12">${esc(a.summary || '')}</div>
+        ${themes ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">${themes}</div>` : ''}
+        ${quotes ? `<div class="prompt-card-title" style="margin-top:8px;margin-bottom:4px">Notable</div>${quotes}` : ''}
+      </div>
+    `;
+  } catch (err) {
+    el.innerHTML = `<div class="card mt-12 text-sm" style="color:var(--error)">${esc(err.message)}</div>`;
+  }
 }
 
 function renderYouTubeEmbed(p) {
@@ -1668,6 +1748,17 @@ async function deleteProject(id) {
   }
 }
 
+async function postFirstComment() {
+  if (!currentProject) return;
+  if (!confirm('YouTube에 첫 번째 댓글을 게시할까요?')) return;
+  try {
+    await api('POST', `/projects/${currentProject.id}/comment`);
+    showToast('댓글 게시 완료', 'success');
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
 async function cloneProject(id) {
   try {
     const cloned = await api('POST', `/projects/${id}/clone`);
@@ -1770,11 +1861,12 @@ async function showAnalytics() {
   el.innerHTML = '<div class="text-sm text-3" style="padding:40px;text-align:center">Loading...</div>';
 
   try {
-    const [usage, analytics] = await Promise.all([
+    const [usage, analytics, substyles] = await Promise.all([
       api('GET', '/usage'),
       api('GET', '/analytics'),
+      api('GET', '/substyles'),
     ]);
-    el.innerHTML = renderUsageSection(usage) + renderAnalyticsSection(analytics);
+    el.innerHTML = renderUsageSection(usage) + renderAnalyticsSection(analytics) + renderSubstyleCoverage(substyles);
   } catch (e) {
     el.innerHTML = `<div style="padding:40px;color:var(--error)">${esc(e.message)}</div>`;
   }
@@ -1889,6 +1981,40 @@ function renderAnalyticsSection(a) {
       </div>
     </section>
   `;
+}
+
+function renderSubstyleCoverage(substyles) {
+  const unused = substyles.filter(s => s.used_count === 0);
+  const cells = substyles.map(s => {
+    const used = s.used_count > 0;
+    return `<div class="cov-cell ${used ? 'used' : 'unused'}" title="${esc(s.label)} (${s.used_count}x)">
+      <span class="cov-name">${esc(s.name.replace(/_/g, ' '))}</span>
+      <span class="cov-count">${s.used_count}</span>
+    </div>`;
+  }).join('');
+
+  return `
+    <section style="margin-top:24px">
+      <div class="section-header">
+        <span class="section-title">Substyle Coverage (${substyles.length - unused.length}/${substyles.length})</span>
+        ${unused.length ? `<button class="btn btn-p btn-sm" onclick="batchCreateUnused()">미사용 ${unused.length}개 배치 생성</button>` : ''}
+      </div>
+      <div class="cov-grid">${cells}</div>
+    </section>
+  `;
+}
+
+async function batchCreateUnused() {
+  const substyles = substyleCache || await api('GET', '/substyles');
+  const unused = substyles.filter(s => s.used_count === 0).map(s => s.name);
+  if (!unused.length) { showToast('모든 substyle 사용됨', 'success'); return; }
+  if (!confirm(`미사용 substyle ${unused.length}개로 프로젝트를 배치 생성할까요?\n${unused.join(', ')}`)) return;
+
+  try {
+    const result = await api('POST', '/projects/batch', { substyles: unused });
+    showToast(`${result.created.length}개 프로젝트 생성 완료`, 'success');
+    showAnalytics();
+  } catch (err) { alert(err.message); }
 }
 
 // --- Substyle ---
